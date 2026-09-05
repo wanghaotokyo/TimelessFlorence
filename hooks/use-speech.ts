@@ -181,7 +181,8 @@ export function useSpeech(text: string, identity: string) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: sentence, speaker: 'Serena' }),
-        signal: AbortSignal.timeout(30000),
+        // The first Qwen request may download and load several gigabytes of weights.
+        signal: AbortSignal.timeout(300000),
       });
       if (!resp.ok)
         throw new Error('本地 Qwen3-TTS 服务未就绪，请确认已启动服务。');
