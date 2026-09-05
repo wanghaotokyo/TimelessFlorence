@@ -1,6 +1,7 @@
 {
   "name": "sites-project",
-  "version": "0.1.0+20260905T095914Z",
+  "version": "0.1.0",
+  "releaseVersion": "v202609051922",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

@@ -54,4 +54,4 @@ Google ID token 经 Google JWKS 验证签名、issuer、audience、到期、nonc
 
 ## 发布版本规则
 
-每次对线上站点做任何更新时，必须在发布前用当前 UTC 精确时间戳更新 `package.json` 与 `package-lock.json` 的版本号，格式为 `0.1.0+YYYYMMDDTHHMMSSZ`。随后执行生产构建、创建新的 Sites 版本并部署；部署成功后才算本次更新完成。当前发布版本：`0.1.0+20260905T095914Z`。
+每次对线上站点做任何更新时，必须在发布前用部署当时的日本时间（Asia/Tokyo）更新 `VERSION` 文件及 `package.json` 的 `releaseVersion`，格式严格为 `vYYYYMMDDHHMM`，例如 `v202609051624`。随后执行生产构建、创建新的 Sites 版本并部署；部署成功后才算本次更新完成。当前发布版本：`v202609051922`。
