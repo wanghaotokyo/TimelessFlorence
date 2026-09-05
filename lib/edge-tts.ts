@@ -39,10 +39,14 @@ export async function synthesize(text: string, voice = DEFAULT_VOICE): Promise<A
   const gec = await makeSecMsGec();
   const muid = makeMuid();
 
-  const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${gec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}&ConnectionId=${connectionId}`;
+  // Cloudflare Workers' fetch-based WebSocket client must begin with an HTTP(S)
+  // URL; the Upgrade header performs the WebSocket handshake. Passing a wss://
+  // URL to fetch throws before the request reaches Edge's speech service.
+  const url = `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${gec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}&ConnectionId=${connectionId}`;
 
   const resp = await fetch(url, {
     headers: {
+      Upgrade: 'websocket',
       'User-Agent': USER_AGENT,
       'Accept-Language': 'en-US,en;q=0.9',
       'Accept-Encoding': 'gzip, deflate, br, zstd',
@@ -56,6 +60,7 @@ export async function synthesize(text: string, voice = DEFAULT_VOICE): Promise<A
   const ws = resp.webSocket;
   if (!ws) throw new HttpError(502, '无法连接语音服务。');
   ws.accept();
+  ws.binaryType = 'arraybuffer';
 
   const config = `Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n${JSON.stringify({
     context: { synthesis: { audio: { metadataoptions: { sentenceBoundaryEnabled: 'false', wordBoundaryEnabled: 'false' }, outputFormat: AUDIO_FORMAT } } },
