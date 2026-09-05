@@ -112,9 +112,7 @@ export function useSpeech(text: string, identity: string) {
     }
 
     setModelState(state => ({ ...state, status: 'preparing', progress: 0, error: '' }));
-    const promise = Promise.all([import('@uzen/kokoro-js'), import('@huggingface/transformers')]).then(async ([{ KokoroTTS }, { env }]) => {
-      const onnx = env.backends?.onnx as { wasm?: { proxy?: boolean } } | undefined;
-      if (onnx?.wasm) onnx.wasm.proxy = true;
+    const promise = import('@uzen/kokoro-js').then(async ({ KokoroTTS }) => {
       const model = await KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: 'fp16',
         device: 'wasm',
