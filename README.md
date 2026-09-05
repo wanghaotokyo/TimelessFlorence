@@ -17,7 +17,7 @@ Windows 11 可选 Kokoro 中文本地神经语音实验版。首次准备会把�
 
 复制 `.env.example` 到本机 `.env`（当前已有空配置）；密钥只在本机文件或部署服务的密钥设置中填写，不发到聊天、不提交 Git。
 
-- `GOOGLE_CLIENT_ID`：Google Cloud 的 Web OAuth 客户端 ID。将实际运行 origin 加入 Authorized JavaScript origins。电脑开发为 `http://localhost:3000`；私有预览为 `https://timeless-florence.pink-leaf-3811.chatgpt.site`。使用 Google Identity Services 的弹窗 credential 流，不需要应用持有 Google client secret。
+- `GOOGLE_CLIENT_ID`：Google Cloud 的 Web OAuth 客户端 ID。将实际运行 origin 加入 Authorized JavaScript origins。电脑开发为 `http://localhost:3000`；当前私有预览为 `https://timeless-florence.haozi-w.chatgpt.site`。使用 Google Identity Services 的弹窗 credential 流，不需要应用持有 Google client secret。
 - `OPENAI_API_KEY`：OpenAI 服务端密钥。Codex 中可以启用 OpenAI Developers 插件，在批准后创建或复用密钥并作为部署密钥设置；本会话没有该插件，未创建任何密钥。
 - `OPENAI_MODEL`：账号可用、支持 Responses 后台模式、web_search、结构化输出的模型 ID。没有暗中默认模型或未授权付费调用。
 - `DAILY_JOB_LIMIT` / `GLOBAL_DAILY_JOB_LIMIT`：每日任务数量上限，默认 10 / 100。一次完整流程包含一次识别任务和一次生成任务，每个任务包含检索与整理两次模型调用。数量上限不是精确金额上限，供应商后台仍应设置费用预算。

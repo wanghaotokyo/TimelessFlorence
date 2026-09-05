@@ -31,7 +31,11 @@ export default function Florence(){
  useEffect(()=>{
   const saved=localStorage.getItem('tf-owner');if(saved)setOwner(saved);
   const net=()=>setOnline(navigator.onLine);net();window.addEventListener('online',net);window.addEventListener('offline',net);
-  if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').then(()=>navigator.serviceWorker.ready).then(()=>setShellReady(true)).catch(()=>setNotice('离线页面暂未准备好，请保持联网使用。'));
+  if('serviceWorker'in navigator){
+   const localPreview=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+   if(localPreview)navigator.serviceWorker.getRegistrations().then(registrations=>Promise.all(registrations.map(registration=>registration.unregister()))).catch(()=>{});
+   else navigator.serviceWorker.register('/sw.js').then(()=>navigator.serviceWorker.ready).then(()=>setShellReady(true)).catch(()=>setNotice('离线页面暂未准备好，请保持联网使用。'));
+  }
   api('/api/config').then(async(c:Config)=>{const previous=localStorage.getItem('tf-owner');if(previous&&previous!==c.user?.id){await clearOwner(previous);localStorage.removeItem('tf-owner');}setConfig(c);setOwner(c.user?.id??'guest');if(c.user)localStorage.setItem('tf-owner',c.user.id);setConfigLoaded(true);}).catch(()=>{setConfigLoaded(true);setNotice('当前无法连接账号服务，仍可打开本机已保存资料。');});
   return()=>{window.removeEventListener('online',net);window.removeEventListener('offline',net);};
  },[]);
