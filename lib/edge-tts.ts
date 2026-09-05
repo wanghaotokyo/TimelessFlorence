@@ -59,7 +59,7 @@ async function openSpeechSocket(
   ];
   let lastStatus = 0;
 
-  for (const endpoint of endpoints) {
+  for (const [endpointIndex, endpoint] of endpoints.entries()) {
     const headers: Record<string, string> = {
       Upgrade: 'websocket',
       'User-Agent': USER_AGENT,
@@ -78,6 +78,11 @@ async function openSpeechSocket(
     };
     if (response.webSocket) return response.webSocket;
     lastStatus = response.status;
+    console.error(
+      'Edge TTS upstream handshake rejected',
+      `endpoint=${endpointIndex + 1}`,
+      `status=${response.status}`,
+    );
   }
 
   throw new HttpError(

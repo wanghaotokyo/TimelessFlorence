@@ -54,7 +54,7 @@ Google ID token 经 Google JWKS 验证签名、issuer、audience、到期、nonc
 
 ## 发布版本规则
 
-每次对线上站点做任何更新时，必须在发布前用部署当时的日本时间（Asia/Tokyo）更新 `VERSION`、`package.json` 的 `releaseVersion` 与 `lib/release.ts`，格式严格为 `vYYYYMMDDHHMM`，例如 `v202609051624`。页面顶部从 `lib/release.ts` 读取版本号；同时更新 `public/sw.js` 的缓存版本，避免用户看到旧页面。随后执行生产构建、创建新的 Sites 版本并部署；部署成功后才算本次更新完成。当前发布版本：`v202609052113`。
+每次对线上站点做任何更新时，必须在发布前用部署当时的日本时间（Asia/Tokyo）更新 `VERSION`、`package.json` 的 `releaseVersion` 与 `lib/release.ts`，格式严格为 `vYYYYMMDDHHMM`，例如 `v202609051624`。页面顶部从 `lib/release.ts` 读取版本号；同时更新 `public/sw.js` 的缓存版本，避免用户看到旧页面。随后执行生产构建、创建新的 Sites 版本并部署；部署成功后才算本次更新完成。当前发布版本：`v202609052116`。
 
 ## 本地 Qwen3-TTS
 
