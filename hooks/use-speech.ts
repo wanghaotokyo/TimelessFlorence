@@ -346,10 +346,12 @@ export function useSpeech(text: string, identity: string) {
         }
       };
 
-      // 4. Prefetch next sentence while this one plays
-      const nextUseEdge = engine === 'edge' ? navigator.onLine : false;
-      if (index + 1 < sentences.length) {
-        prefetchSentence(index + 1, epoch, nextUseEdge);
+      // 4. Keep a two-sentence buffer so Edge requests overlap audible playback.
+      const nextUseEdge = engine === 'edge';
+      for (let lookahead = 1; lookahead <= 2; lookahead += 1) {
+        if (index + lookahead < sentences.length) {
+          prefetchSentence(index + lookahead, epoch, nextUseEdge);
+        }
       }
 
       try {
