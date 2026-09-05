@@ -190,7 +190,14 @@ export function useSpeech(text: string, identity: string) {
             signal,
           });
           if (resp.ok) return resp.blob();
-          lastError = new Error(`Edge TTS 请求失败（${resp.status}）`);
+          const detail = (await resp.json().catch(() => null)) as {
+            error?: unknown;
+          } | null;
+          lastError = new Error(
+            typeof detail?.error === 'string'
+              ? detail.error
+              : `Edge TTS 请求失败（${resp.status}）`,
+          );
           if (![429, 502, 503, 504].includes(resp.status)) break;
         } catch (error) {
           if ((error as Error).name === 'AbortError') throw error;
@@ -260,7 +267,7 @@ export function useSpeech(text: string, identity: string) {
           status: 'error',
           completed,
           total,
-          error: `第 ${completed + 1} 句生成失败，请检查网络后重试。`,
+          error: `第 ${completed + 1} 句生成失败：${(error as Error).message}`,
         });
       }
     })();
