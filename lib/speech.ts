@@ -1,4 +1,4 @@
-export type SpeechState = { status: 'idle' | 'speaking' | 'paused' | 'ended' | 'error'; index: number; error: string };
+export type SpeechState = { status: 'idle' | 'preparing' | 'generating' | 'speaking' | 'paused' | 'ended' | 'error'; index: number; error: string };
 export interface Engine {
   speak(u: SpeechSynthesisUtterance): void;
   cancel(): void;

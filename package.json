@@ -16,6 +16,7 @@
   "dependencies": {
     "@base-ui/react": "1.7.0",
     "@shadcn/react": "0.3.0",
+    "@uzen/kokoro-js": "1.2.4",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
@@ -54,6 +55,10 @@
     "typescript": "5.9.3",
     "vite": "^8.2.2",
     "wrangler": "4.92.0"
+  },
+  "overrides": {
+    "adm-zip": "0.6.0",
+    "sharp": "0.35.4"
   },
   "type": "module"
 }
