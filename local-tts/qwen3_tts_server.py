@@ -11,6 +11,7 @@ import soundfile as sf
 import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from qwen_tts import Qwen3TTSModel
 import uvicorn
@@ -55,7 +56,7 @@ def tts(request: TTSRequest):
         )
         audio = io.BytesIO()
         sf.write(audio, np.asarray(wavs[0]), sample_rate, format="WAV")
-        return __import__("fastapi").responses.Response(audio.getvalue(), media_type="audio/wav")
+        return Response(audio.getvalue(), media_type="audio/wav")
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Qwen3-TTS 生成失败：{error}") from error
 
