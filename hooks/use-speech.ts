@@ -13,7 +13,7 @@ type NaturalModel = {
 type ProgressInfo = { status?: string; progress?: number; loaded?: number; total?: number; file?: string };
 
 const MODEL_ID = 'onnx-community/Kokoro-82M-v1.1-zh-ONNX';
-const MODEL_CACHE_HINT = 'tf-kokoro-zh-ready-v1';
+const MODEL_CACHE_HINT = 'tf-kokoro-zh-ready-v2';
 const ENGINE_KEY = 'tf-speech-engine';
 
 function emptyState(): SpeechState {
@@ -115,7 +115,7 @@ export function useSpeech(text: string, identity: string) {
     setModelState(state => ({ ...state, status: 'preparing', progress: 0, error: '' }));
     const promise = import('@uzen/kokoro-js').then(async ({ KokoroTTS }) => {
       const model = await KokoroTTS.from_pretrained(MODEL_ID, {
-        dtype: 'fp16',
+        dtype: 'fp32',
         device: 'wasm',
         voicePath: '/kokoro/voices',
         progress_callback: (raw: unknown) => {
@@ -164,8 +164,17 @@ export function useSpeech(text: string, identity: string) {
       const rawAudio = await model.generate(sentences[index], { voice: 'zf_001', speed: 0.94 });
       if (epoch !== naturalEpochRef.current) return;
       let peak = 0;
-      for (const sample of rawAudio.data) peak = Math.max(peak, Math.abs(sample));
-      if (peak < 0.00001) throw new Error('生成的语音没有可播放的声音。');
+      let validSamples = 0;
+      for (let sampleIndex = 0; sampleIndex < rawAudio.data.length; sampleIndex += 1) {
+        const sample = rawAudio.data[sampleIndex];
+        if (!Number.isFinite(sample)) {
+          rawAudio.data[sampleIndex] = 0;
+          continue;
+        }
+        validSamples += 1;
+        peak = Math.max(peak, Math.abs(sample));
+      }
+      if (!validSamples || peak < 0.00001) throw new Error('生成的语音没有可播放的声音。');
       const gain = Math.min(12, 0.75 / peak);
       if (gain !== 1) for (let sampleIndex = 0; sampleIndex < rawAudio.data.length; sampleIndex += 1) rawAudio.data[sampleIndex] *= gain;
       const url = URL.createObjectURL(rawAudio.toBlob());
