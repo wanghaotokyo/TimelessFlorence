@@ -154,7 +154,7 @@ export async function synthesize(
     },
   )}\r\n`;
   const requestId = crypto.randomUUID().replace(/-/g, '');
-  const ssml = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='zh-CN'><voice name='${escapeXml(voice)}'><mstts:express-as style='calm' styledegree='1.15'><prosody rate='-14%' pitch='-1st'>${escapeXml(cleanXml(text))}</prosody></mstts:express-as></voice></speak>`;
+  const ssml = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='${escapeXml(voice)}'><prosody rate='-14%' pitch='-2Hz' volume='+0%'>${escapeXml(cleanXml(text))}</prosody></voice></speak>`;
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     let done = false;
