@@ -85,6 +85,7 @@ export function useSpeech(text: string, identity: string) {
       audio.pause();
       audio.removeAttribute('src');
       audio.load();
+      audio.remove();
     }
     audioRef.current = null;
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
@@ -163,8 +164,16 @@ export function useSpeech(text: string, identity: string) {
       const rawAudio = await model.generate(sentences[index], { voice: 'zf_001', speed: 0.94 });
       if (epoch !== naturalEpochRef.current) return;
       const url = URL.createObjectURL(rawAudio.toBlob());
-      const audio = new Audio(url);
+      const audio = document.createElement('audio');
       audio.preload = 'auto';
+      audio.autoplay = false;
+      audio.muted = false;
+      audio.volume = 1;
+      audio.setAttribute('playsinline', '');
+      audio.dataset.tfNaturalAudio = 'true';
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
+      audio.src = url;
       audioRef.current = audio;
       audioUrlRef.current = url;
       audio.onended = () => {
