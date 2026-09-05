@@ -8,7 +8,7 @@ export type SpeechEngine = 'natural' | 'system';
 type ModelStatus = 'idle' | 'preparing' | 'ready' | 'error';
 type ModelState = { status: ModelStatus; progress: number; error: string; cached: boolean };
 type NaturalModel = {
-  generate(text: string, options: { voice: 'zf_001'; speed: number }): Promise<{ toBlob(): Blob }>;
+  generate(text: string, options: { voice: 'zf_001'; speed: number }): Promise<{ data: Float32Array; toBlob(): Blob }>;
 };
 type ProgressInfo = { status?: string; progress?: number; loaded?: number; total?: number; file?: string };
 
@@ -163,6 +163,11 @@ export function useSpeech(text: string, identity: string) {
       setNaturalState({ status: 'generating', index, error: '' });
       const rawAudio = await model.generate(sentences[index], { voice: 'zf_001', speed: 0.94 });
       if (epoch !== naturalEpochRef.current) return;
+      let peak = 0;
+      for (const sample of rawAudio.data) peak = Math.max(peak, Math.abs(sample));
+      if (peak < 0.00001) throw new Error('生成的语音没有可播放的声音。');
+      const gain = Math.min(12, 0.75 / peak);
+      if (gain !== 1) for (let sampleIndex = 0; sampleIndex < rawAudio.data.length; sampleIndex += 1) rawAudio.data[sampleIndex] *= gain;
       const url = URL.createObjectURL(rawAudio.toBlob());
       const audio = document.createElement('audio');
       audio.preload = 'auto';
@@ -171,6 +176,8 @@ export function useSpeech(text: string, identity: string) {
       audio.volume = 1;
       audio.setAttribute('playsinline', '');
       audio.dataset.tfNaturalAudio = 'true';
+      audio.dataset.tfNaturalPeak = peak.toFixed(4);
+      audio.dataset.tfNaturalGain = gain.toFixed(2);
       audio.style.display = 'none';
       document.body.appendChild(audio);
       audio.src = url;
