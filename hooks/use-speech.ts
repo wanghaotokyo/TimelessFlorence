@@ -178,14 +178,26 @@ export function useSpeech(text: string, identity: string) {
      ════════════════════════════════════════════════════ */
   const generateEdgeBlob = useCallback(
     async (sentence: string, signal?: AbortSignal): Promise<Blob> => {
-      const resp = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: sentence }),
-        signal,
-      });
-      if (!resp.ok) throw new Error('Edge TTS 请求失败');
-      return resp.blob();
+      const delays = [0, 800, 2000];
+      let lastError = new Error('Edge TTS 请求失败');
+      for (const delay of delays) {
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+        try {
+          const resp = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: sentence }),
+            signal,
+          });
+          if (resp.ok) return resp.blob();
+          lastError = new Error(`Edge TTS 请求失败（${resp.status}）`);
+          if (![429, 502, 503, 504].includes(resp.status)) break;
+        } catch (error) {
+          if ((error as Error).name === 'AbortError') throw error;
+          lastError = error as Error;
+        }
+      }
+      throw lastError;
     },
     [],
   );
