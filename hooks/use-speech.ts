@@ -41,7 +41,7 @@ export function useSpeech(text: string, identity: string) {
   useEffect(() => {
     const canUseSystem = 'speechSynthesis' in window;
     setSupported(canUseSystem);
-    setNaturalSupported('gpu' in navigator);
+    setNaturalSupported(typeof WebAssembly !== 'undefined');
     setModelState(state => ({ ...state, cached: localStorage.getItem(MODEL_CACHE_HINT) === '1' }));
     const saved = localStorage.getItem(ENGINE_KEY);
     if (saved === 'natural' || saved === 'system') setEngineState(saved);
@@ -105,8 +105,8 @@ export function useSpeech(text: string, identity: string) {
   const prepareNatural = useCallback(async (): Promise<NaturalModel> => {
     if (modelRef.current) return modelRef.current;
     if (modelPromiseRef.current) return modelPromiseRef.current;
-    if (!('gpu' in navigator)) {
-      const message = '本地自然声需要 Windows 11 的最新版 Edge 或 Chrome，并启用硬件加速。';
+    if (typeof WebAssembly === 'undefined') {
+      const message = '当前浏览器不支持本地自然声，请改用最新版 Edge 或 Chrome。';
       setModelState(state => ({ ...state, status: 'error', error: message }));
       throw new Error(message);
     }
@@ -115,7 +115,7 @@ export function useSpeech(text: string, identity: string) {
     const promise = import('@uzen/kokoro-js').then(async ({ KokoroTTS }) => {
       const model = await KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: 'fp16',
-        device: 'webgpu',
+        device: 'wasm',
         voicePath: '/kokoro/voices',
         progress_callback: (raw: unknown) => {
           const info = raw as ProgressInfo;
@@ -138,7 +138,7 @@ export function useSpeech(text: string, identity: string) {
     }).catch(error => {
       modelPromiseRef.current = null;
       const message = navigator.onLine
-        ? '自然声准备失败。请确认 Edge 或 Chrome 已开启硬件加速，然后重试。'
+        ? '自然声准备失败。请刷新页面后重试，或暂时选择 Windows 系统声音。'
         : '自然声模型尚未完整下载，请联网完成一次准备。';
       setModelState(state => ({ ...state, status: 'error', error: message }));
       throw error instanceof Error ? new Error(message, { cause: error }) : new Error(message);
@@ -185,8 +185,8 @@ export function useSpeech(text: string, identity: string) {
       } catch {
         if (epoch === naturalEpochRef.current) setNaturalState({ status: 'paused', index, error: '声音已准备好，请再次点击播放。' });
       }
-    } catch (error) {
-      if (epoch === naturalEpochRef.current) setNaturalState({ status: 'error', index, error: error instanceof Error ? error.message : '自然声准备失败，请重试。' });
+    } catch {
+      if (epoch === naturalEpochRef.current) setNaturalState({ status: 'error', index, error: '自然声生成失败。请刷新页面后重试，或在语音设置中选择 Windows 系统声音。' });
     }
   }, [clearNaturalAudio, identity, prepareNatural, sentences]);
 
