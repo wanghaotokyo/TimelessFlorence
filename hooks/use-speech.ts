@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SentenceSpeaker, type SpeechState } from '@/lib/speech';
 import { splitSentences } from '@/lib/types';
+import { readAudioCache, writeAudioCache } from '@/lib/audio-cache';
 
 export type SpeechEngine = 'edge' | 'qwen' | 'system';
 type ModelStatus = 'idle' | 'preparing' | 'ready' | 'error';
@@ -12,10 +13,17 @@ type ModelState = {
   error: string;
   cached: boolean;
 };
+export type AudioPreparationState = {
+  status: 'idle' | 'preparing' | 'ready' | 'error';
+  completed: number;
+  total: number;
+  error: string;
+};
 
 const QWEN_URL_KEY = 'tf-qwen-tts-url';
 const DEFAULT_QWEN_URL = 'http://127.0.0.1:9233';
 const ENGINE_KEY = 'tf-speech-engine';
+const EDGE_AUDIO_PROFILE = 'xiaomo-calm-1.15-rate-14-pitch-1-v1';
 
 function emptyState(): SpeechState {
   return { status: 'idle', index: 0, error: '' };
@@ -35,6 +43,13 @@ export function useSpeech(text: string, identity: string) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef('');
   const prefetchRef = useRef<Map<number, Blob>>(new Map());
+  const [preparation, setPreparation] = useState<AudioPreparationState>({
+    status: 'idle',
+    completed: 0,
+    total: 0,
+    error: '',
+  });
+  const [preparationAttempt, setPreparationAttempt] = useState(0);
 
   /* ── Qwen3-TTS service state ── */
   const [qwenUrl, setQwenUrlState] = useState(DEFAULT_QWEN_URL);
@@ -162,17 +177,87 @@ export function useSpeech(text: string, identity: string) {
      Audio blob generation — Edge TTS vs local Qwen3-TTS
      ════════════════════════════════════════════════════ */
   const generateEdgeBlob = useCallback(
-    async (sentence: string): Promise<Blob> => {
+    async (sentence: string, signal?: AbortSignal): Promise<Blob> => {
       const resp = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: sentence }),
+        signal,
       });
       if (!resp.ok) throw new Error('Edge TTS 请求失败');
       return resp.blob();
     },
     [],
   );
+
+  const edgeCacheKey = useCallback(
+    (index: number) =>
+      `edge:${EDGE_AUDIO_PROFILE}:${identity}:${index}:${sentences[index]}`,
+    [identity, sentences],
+  );
+
+  /* ════════════════════════════════════════════════════
+     Prepare and persist the complete Edge narration
+     ════════════════════════════════════════════════════ */
+  useEffect(() => {
+    if (engine !== 'edge' || !sentences.length) {
+      setPreparation({ status: 'idle', completed: 0, total: 0, error: '' });
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const total = sentences.length;
+    setPreparation({ status: 'preparing', completed: 0, total, error: '' });
+
+    void (async () => {
+      let completed = 0;
+      try {
+        for (let index = 0; index < total; index += 1) {
+          if (cancelled) return;
+          const key = edgeCacheKey(index);
+          let blob = prefetchRef.current.get(index) ?? null;
+          if (!blob) {
+            try {
+              blob = await readAudioCache(key);
+            } catch {
+              // Browser storage can be unavailable in private browsing.
+            }
+          }
+          if (!blob) {
+            blob = await generateEdgeBlob(sentences[index], controller.signal);
+            try {
+              await writeAudioCache(key, blob);
+            } catch {
+              // Keep the in-memory copy when persistent storage is unavailable.
+            }
+          }
+          if (cancelled) return;
+          prefetchRef.current.set(index, blob);
+          completed = index + 1;
+          setPreparation({
+            status: completed === total ? 'ready' : 'preparing',
+            completed,
+            total,
+            error: '',
+          });
+        }
+      } catch (error) {
+        if (cancelled || (error as Error).name === 'AbortError') return;
+        setPreparation({
+          status: 'error',
+          completed,
+          total,
+          error: `第 ${completed + 1} 句生成失败，请检查网络后重试。`,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [edgeCacheKey, engine, generateEdgeBlob, preparationAttempt, sentences]);
 
   const generateQwenBlob = useCallback(
     async (sentence: string): Promise<Blob> => {
@@ -266,7 +351,14 @@ export function useSpeech(text: string, identity: string) {
       let blob = prefetchRef.current.get(index);
       if (blob) {
         prefetchRef.current.delete(index);
-      } else {
+      } else if (useEdge) {
+        try {
+          blob = (await readAudioCache(edgeCacheKey(index))) ?? undefined;
+        } catch {
+          // Fall through to on-demand generation.
+        }
+      }
+      if (!blob) {
         // 2. Generate on demand
         setAudioState({
           status: 'generating',
@@ -346,11 +438,12 @@ export function useSpeech(text: string, identity: string) {
         }
       };
 
-      // 4. Keep a two-sentence buffer so Edge requests overlap audible playback.
-      const nextUseEdge = engine === 'edge';
-      for (let lookahead = 1; lookahead <= 2; lookahead += 1) {
-        if (index + lookahead < sentences.length) {
-          prefetchSentence(index + lookahead, epoch, nextUseEdge);
+      // 4. Qwen remains on-demand and keeps a small in-memory lookahead buffer.
+      if (engine === 'qwen') {
+        for (let lookahead = 1; lookahead <= 2; lookahead += 1) {
+          if (index + lookahead < sentences.length) {
+            prefetchSentence(index + lookahead, epoch, false);
+          }
         }
       }
 
@@ -375,6 +468,7 @@ export function useSpeech(text: string, identity: string) {
       engine,
       generateQwenBlob,
       generateEdgeBlob,
+      edgeCacheKey,
       identity,
       prefetchSentence,
       sentences,
@@ -437,7 +531,12 @@ export function useSpeech(text: string, identity: string) {
      Unified output — same API for all consumers
      ════════════════════════════════════════════════════ */
   const state = engine === 'system' ? systemState : audioState;
-  const canPlay = engine === 'system' ? Boolean(voice && supported) : true;
+  const canPlay =
+    engine === 'system'
+      ? Boolean(voice && supported)
+      : engine === 'edge'
+        ? preparation.status === 'ready'
+        : true;
   const isBusy = ['preparing', 'generating'].includes(state.status);
 
   return {
@@ -449,6 +548,8 @@ export function useSpeech(text: string, identity: string) {
     supported,
     naturalSupported: true,
     modelState,
+    preparation,
+    retryPreparation: () => setPreparationAttempt((value) => value + 1),
     qwenUrl,
     setQwenUrl,
     checkQwen,

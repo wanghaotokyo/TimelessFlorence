@@ -827,7 +827,7 @@ export default function Florence() {
                     ? owner === 'guest'
                       ? '精选示例保存在本机。登录后，新生成讲解会同步到账号。'
                       : '账号履历与本机示例。重新打开即可继续阅读。'
-                    : '保存文字与图片；中文声音由设备即时提供，不保存音频。'}
+                    : '保存文字与图片；Edge 中文讲解音频会生成并保存在当前浏览器。'}
                 </p>
                 {view === 'history' && config.user && (
                   <Button variant="outline" onClick={sync}>
@@ -958,7 +958,8 @@ export default function Florence() {
         <DialogContent className="modal">
           <DialogTitle>语音与设置</DialogTitle>
           <DialogDescription>
-            语音只在当前设备即时处理，不保存音频，也不使用收费语音服务。
+            Edge
+            在线自然声会在讲解文出现后自动生成，并保存到当前浏览器供重复播放；不使用收费语音服务。
           </DialogDescription>
           <div className="setting-block">
             <h3>中文朗读引擎</h3>
@@ -975,8 +976,8 @@ export default function Florence() {
             {speech.engine === 'edge' ? (
               <div className="voice-setup">
                 <p>
-                  联网时优先使用微软 Edge
-                  在线自然声。离线时请选择本地 Qwen3-TTS 或 Windows 系统声音。
+                  联网时优先使用微软 Edge 在线自然声。离线时请选择本地 Qwen3-TTS
+                  或 Windows 系统声音。
                 </p>
                 <p className="quiet">
                   免费、自然、无需预下载模型。声音由微软 Edge 服务提供。
@@ -985,7 +986,8 @@ export default function Florence() {
             ) : speech.engine === 'qwen' ? (
               <div className="voice-setup">
                 <p>
-                  Qwen3-TTS-12Hz-1.7B-CustomVoice 中文高保真朗读。模型仅在当前电脑运行，离线时也可使用。
+                  Qwen3-TTS-12Hz-1.7B-CustomVoice
+                  中文高保真朗读。模型仅在当前电脑运行，离线时也可使用。
                 </p>
                 <div
                   style={{
@@ -1015,8 +1017,7 @@ export default function Florence() {
                     disabled={speech.modelState.status === 'preparing'}
                     onClick={() => {
                       void speech.checkQwen().then((ok) => {
-                        if (ok)
-                          setNotice('已成功连接到本地 Qwen3-TTS 服务！');
+                        if (ok) setNotice('已成功连接到本地 Qwen3-TTS 服务！');
                       });
                     }}
                   >
@@ -1042,7 +1043,8 @@ export default function Florence() {
                   )}
                 </div>
                 <p className="quiet" style={{ marginTop: '8px' }}>
-                  提示：启动项目中提供的 Qwen3-TTS 本机服务（默认 9233 端口），断网时将由此服务即时合成语音。
+                  提示：启动项目中提供的 Qwen3-TTS 本机服务（默认 9233
+                  端口），断网时将由此服务即时合成语音。
                 </p>
               </div>
             ) : (
