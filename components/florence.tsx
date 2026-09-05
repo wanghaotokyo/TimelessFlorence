@@ -1,80 +1,1167 @@
 'use client';
-import {useCallback,useEffect,useRef,useState} from 'react';
-import {Search,Headphones,ArrowUpRight,Landmark,History,Download,Settings,Sparkles,Check,WifiOff,Globe,Clock,Pencil,Trash2,LoaderCircle,ExternalLink,RefreshCw,LogOut,X} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import {Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter} from '@/components/ui/dialog';
-import {AlertDialog,AlertDialogContent,AlertDialogTitle,AlertDialogDescription,AlertDialogFooter,AlertDialogCancel} from '@/components/ui/alert-dialog';
-import {SidebarProvider,Sidebar} from '@/components/ui/sidebar';
-import {RadioGroup,RadioGroupItem} from '@/components/ui/radio-group';
-import {Picker} from './picker';
-import {ArtImage} from './art-image';
-import {GuideDetail,Player} from './guide-detail';
-import {demoGuide} from '@/lib/demo';
-import {type Guide,type Config,type Language,type Duration,type Candidate,type Job,validateTitle} from '@/lib/types';
-import {listLocal,putLocal,removeLocal,clearOwner,downloadGuide,syncHistory,type LocalGuide} from '@/lib/local';
-import {useSpeech,type SpeechEngine} from '@/hooks/use-speech';
-import {RELEASE_VERSION} from '@/lib/release';
-type View='explore'|'history'|'offline';
-const languages={zh:'中文',ja:'日本語',en:'English'};
-const date=(s:string)=>new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(s));
-const size=(n:number)=>n>1e6?`${(n/1e6).toFixed(1)} MB`:`${Math.round(n/1000)} KB`;
-async function api(url:string,init?:RequestInit){const r=await fetch(url,init);let data;try{data=await r.json() as any;}catch{throw new Error('连接失败，请稍后重试。');}if(!r.ok)throw new Error(data.error??'操作失败，请重试。');return data;}
-function post(data:unknown):RequestInit{return {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)};}
-export default function Florence(){
- const [view,setView]=useState<View>('explore'),[guide,setGuide]=useState<Guide|null>(null),[query,setQuery]=useState(''),[language,setLanguage]=useState<Language>('zh'),[duration,setDuration]=useState<Duration>(5);
- const [config,setConfig]=useState<Config>({googleClientId:'',generationReady:false,user:null}),[configLoaded,setConfigLoaded]=useState(false),[owner,setOwner]=useState('guest');const ownerRef=useRef(owner);
- const [rows,setRows]=useState<LocalGuide[]>([]),[online,setOnline]=useState(true),[notice,setNotice]=useState(''),[busy,setBusy]=useState(''),[settings,setSettings]=useState(false),[login,setLogin]=useState(false),[rename,setRename]=useState<LocalGuide|null>(null),[newTitle,setNewTitle]=useState(''),[deleting,setDeleting]=useState<LocalGuide|null>(null);
- const [candidates,setCandidates]=useState<Candidate[]>([]),[resolveId,setResolveId]=useState(''),[selected,setSelected]=useState('0'),[job,setJob]=useState<{id:string;kind:'resolve'|'generate';state:string}|null>(null),[candidateMessage,setCandidateMessage]=useState(''),[shellReady,setShellReady]=useState(false);
- const googleRef=useRef<HTMLDivElement>(null);const speech=useSpeech(guide?.language==='zh'?guide.speech:'',`${owner}:${guide?.id??'none'}`);
- useEffect(()=>{ownerRef.current=owner;},[owner]);
- const refresh=useCallback(async()=>{try{const current=ownerRef.current;const r=await listLocal(current);if(current===ownerRef.current)setRows(r);}catch(e){setNotice((e as Error).message);}},[]);
- const sync=useCallback(async()=>{const current=ownerRef.current;if(current==='guest')return;try{const result=await syncHistory(current);if(ownerRef.current===current)setRows(result);}catch(e){setNotice((e as Error).message);}},[]);
- useEffect(()=>{
-  const saved=localStorage.getItem('tf-owner');if(saved)setOwner(saved);
-  const net=()=>setOnline(navigator.onLine);net();window.addEventListener('online',net);window.addEventListener('offline',net);
-  if('serviceWorker'in navigator){
-   const localPreview=location.hostname==='localhost'||location.hostname==='127.0.0.1';
-   if(localPreview)navigator.serviceWorker.getRegistrations().then(registrations=>Promise.all(registrations.map(registration=>registration.unregister()))).catch(()=>{});
-   else navigator.serviceWorker.register('/sw.js').then(()=>navigator.serviceWorker.ready).then(()=>setShellReady(true)).catch(()=>setNotice('离线页面暂未准备好，请保持联网使用。'));
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Search,
+  Headphones,
+  ArrowUpRight,
+  Landmark,
+  History,
+  Download,
+  Settings,
+  Sparkles,
+  Check,
+  WifiOff,
+  Globe,
+  Clock,
+  Pencil,
+  Trash2,
+  LoaderCircle,
+  ExternalLink,
+  RefreshCw,
+  LogOut,
+  X,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
+import { SidebarProvider, Sidebar } from '@/components/ui/sidebar';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Picker } from './picker';
+import { ArtImage } from './art-image';
+import { GuideDetail, Player } from './guide-detail';
+import { demoGuide } from '@/lib/demo';
+import {
+  type Guide,
+  type Config,
+  type Language,
+  type Duration,
+  type Candidate,
+  type Job,
+  validateTitle,
+} from '@/lib/types';
+import {
+  listLocal,
+  putLocal,
+  removeLocal,
+  clearOwner,
+  downloadGuide,
+  syncHistory,
+  type LocalGuide,
+} from '@/lib/local';
+import { useSpeech, type SpeechEngine } from '@/hooks/use-speech';
+import { RELEASE_VERSION } from '@/lib/release';
+type View = 'explore' | 'history' | 'offline';
+const languages = { zh: '中文', ja: '日本語', en: 'English' };
+const date = (s: string) =>
+  new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(s));
+const size = (n: number) =>
+  n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1000)} KB`;
+async function api(url: string, init?: RequestInit) {
+  const r = await fetch(url, init);
+  let data;
+  try {
+    data = (await r.json()) as any;
+  } catch {
+    throw new Error('连接失败，请稍后重试。');
   }
-  api('/api/config').then(async(c:Config)=>{const previous=localStorage.getItem('tf-owner');if(previous&&previous!==c.user?.id){await clearOwner(previous);localStorage.removeItem('tf-owner');}setConfig(c);setOwner(c.user?.id??'guest');if(c.user)localStorage.setItem('tf-owner',c.user.id);setConfigLoaded(true);}).catch(()=>{setConfigLoaded(true);setNotice('当前无法连接账号服务，仍可打开本机已保存资料。');});
-  return()=>{window.removeEventListener('online',net);window.removeEventListener('offline',net);};
- },[]);
- useEffect(()=>{void refresh();if(owner!=='guest'&&online)void sync();const active=localStorage.getItem('tf-job:'+owner);if(active){try{setJob(JSON.parse(active));}catch{localStorage.removeItem('tf-job:'+owner);}}else setJob(null);},[owner,online,refresh,sync]);
- useEffect(()=>{if(job)localStorage.setItem('tf-job:'+owner,JSON.stringify(job));},[job,owner]);
- useEffect(()=>{
-  if(!job||!online||owner==='guest')return;let alive=true;let timer:ReturnType<typeof setTimeout>;
-  const poll=async()=>{try{const next:Job=await api('/api/jobs/'+job.id);if(!alive)return;
-   if(next.state==='completed'){setJob(null);localStorage.removeItem('tf-job:'+owner);if(next.kind==='resolve'){const result=next.result as {candidates:Candidate[];message:string};setCandidates(result.candidates);setCandidateMessage(result.message);setResolveId(next.id);setSelected('0');}else{setGuide(next.result as Guide);setCandidates([]);setView('explore');await sync();setNotice('讲解已生成并保存到履历。');}return;}
-   if(['failed','cancelled'].includes(next.state)){setNotice(next.error||'任务已取消。');setJob(null);localStorage.removeItem('tf-job:'+owner);return;}
-   setJob(j=>j?{...j,state:next.state}:j);timer=setTimeout(poll,3500);
-  }catch(e){if(alive){setNotice((e as Error).message);timer=setTimeout(poll,10000);}}};timer=setTimeout(poll,1000);return()=>{alive=false;clearTimeout(timer);};
- },[job?.id,online,owner,sync]);
- useEffect(()=>{if(!login||!config.googleClientId)return;let stopped=false;
-  const initialize=async()=>{try{const {nonce}=await api('/api/auth/nonce',post({}));if(stopped)return;const google=(window as any).google;google.accounts.id.initialize({client_id:config.googleClientId,nonce,callback:async(response:{credential:string})=>{try{const result=await api('/api/auth/google',post(response));speech.stop();setGuide(null);setRows([]);setOwner(result.user.id);localStorage.setItem('tf-owner',result.user.id);setConfig(c=>({...c,user:result.user}));setLogin(false);setNotice('已登录，履历将同步到你的账号。');}catch(e){setNotice((e as Error).message);}}});if(googleRef.current)google.accounts.id.renderButton(googleRef.current,{theme:'outline',size:'large',text:'signin_with',locale:'zh_CN'});}catch(e){setNotice((e as Error).message);}};
-  if((window as any).google)void initialize();else{let script=document.getElementById('google-identity')as HTMLScriptElement|null;if(!script){script=document.createElement('script');script.id='google-identity';script.src='https://accounts.google.com/gsi/client';script.async=true;document.head.appendChild(script);}script.onload=()=>void initialize();script.onerror=()=>setNotice('无法连接 Google，请检查网络后重试。');}return()=>{stopped=true;};
- },[login,config.googleClientId]);
- function navigate(v:View){speech.stop();setGuide(null);setView(v);setNotice('');void refresh();}
- async function openDemo(){speech.stop();const old=rows.find(r=>r.guide.id===demoGuide.id);const g=old?.guide??{...demoGuide,createdAt:new Date().toISOString()};setGuide(g);setView('explore');await putLocal(old??{key:`${owner}:${g.id}`,owner,guide:g,offline:false,bytes:0}).catch(e=>setNotice(e.message));await refresh();}
- async function search(){setNotice('');if(!query.trim())return setNotice('请先输入作品名称、作者或一些线索。');if(!online)return setNotice('识别新作品需要联网，已有资料可以离线打开。');if(!config.user){setLogin(true);return;}if(!config.generationReady)return setNotice('作品生成服务尚未配置，可先打开精选中文讲解体验。');const id=crypto.randomUUID();setBusy('search');setCandidates([]);setCandidateMessage('');try{const result=await api('/api/jobs',post({id,kind:'resolve',query}));setJob({id,kind:'resolve',state:result.state});}catch(e){setNotice((e as Error).message);}finally{setBusy('');}}
- async function generate(){const id=crypto.randomUUID();setBusy('generate');try{const result=await api('/api/jobs',post({id,kind:'generate',resolveId,candidateIndex:Number(selected),language,duration}));setJob({id,kind:'generate',state:result.state});setCandidates([]);}catch(e){setNotice((e as Error).message);}finally{setBusy('');}}
- async function cancel(){if(!job)return;try{await api('/api/jobs/'+job.id,{method:'DELETE'});localStorage.removeItem('tf-job:'+owner);setJob(null);setNotice('已取消；已发出的文字服务请求可能仍计费。');}catch(e){setNotice((e as Error).message);}}
- async function saveOffline(g:Guide){setBusy('download');try{await downloadGuide(owner,g,rows.find(r=>r.guide.id===g.id));await refresh();setNotice('文字与图片已保存。离线收听还需本机中文声音。');}catch(e){setNotice((e as Error).message);}finally{setBusy('');}}
- async function unDownload(r:LocalGuide){try{await putLocal({...r,offline:false,imageBlob:undefined,imageHash:undefined,bytes:0});await refresh();setNotice('已移除本机下载，履历仍保留。');}catch(e){setNotice((e as Error).message);}}
- async function doRename(){if(!rename)return;try{const title=validateTitle(newTitle);const next={...rename,guide:{...rename.guide,title,version:rename.conflict?.version??rename.guide.version},pending:rename.guide.demo?undefined:'rename' as const,conflict:undefined};await putLocal(next);setRename(null);if(guide?.id===next.guide.id)setGuide(next.guide);await refresh();if(online&&!next.guide.demo)await sync();}catch(e){setNotice((e as Error).message);}}
- async function doDelete(){if(!deleting)return;try{if(deleting.guide.demo)await removeLocal(deleting.key);else await putLocal({...deleting,pending:'delete',offline:false,imageBlob:undefined,bytes:0});if(guide?.id===deleting.guide.id){speech.stop();setGuide(null);}setDeleting(null);await refresh();if(online)await sync();}catch(e){setNotice((e as Error).message);}}
- async function logout(){try{await api('/api/auth/logout',post({}));speech.stop();await clearOwner(owner);for(const key of Object.keys(localStorage))if(key.startsWith('tf-bookmark:'+owner+':')||key==='tf-job:'+owner)localStorage.removeItem(key);localStorage.removeItem('tf-owner');setOwner('guest');setRows([]);setGuide(null);setConfig(c=>({...c,user:null}));setSettings(false);}catch{setNotice('退出未完成，请联网重试，以结束账号会话。');}}
- const selectedRow=rows.find(r=>r.guide.id===guide?.id),visibleRows=rows.filter(r=>r.pending!=='delete'&&(view!=='offline'||r.offline)).sort((a,b)=>b.guide.createdAt.localeCompare(a.guide.createdAt));
- useEffect(()=>{const context=(document as any).modelContext;if(!context?.registerTool)return;const lifecycle=new AbortController();Promise.resolve(context.registerTool({name:'stage_artwork_search',title:'填写作品线索',description:'Fill the visible artwork search form. Does not submit or spend credits.',inputSchema:{type:'object',properties:{query:{type:'string',minLength:1,maxLength:1000}},required:['query'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute:async(input:unknown)=>{const q=(input as any)?.query;if(typeof q!=='string'||!q.trim()||q.length>1000)throw new Error('请输入 1–1000 字线索。');window.speechSynthesis?.cancel();setGuide(null);setView('explore');setQuery(q);await new Promise(resolve=>setTimeout(resolve,0));return {query:q,submitted:false};}},{signal:lifecycle.signal})).catch(()=>{});return()=>lifecycle.abort();},[]);
- return <main className="shell"><header className="topbar"><div style={{display:'flex',alignItems:'baseline',gap:'12px'}}><a className="brand" href="/" aria-label="Timeless Florence 首页"><Landmark/><span>Timeless <i>Florence</i></span></a><span style={{fontSize:'12px',color:'#8c9c93',fontFamily:'monospace'}}>{RELEASE_VERSION}</span></div><span className="edition">ART, BEYOND TIME</span><Button variant="outline" onClick={()=>config.user?setSettings(true):setLogin(true)} disabled={!configLoaded}>{config.user?config.user.name:'Google 账号登录'}</Button></header><SidebarProvider className="workspace" style={{'--sidebar-width':'216px'}as React.CSSProperties}><Sidebar collapsible="none" className="rail"><div className="eyebrow">你的艺术旅程</div>{([{id:'explore',name:'探索作品',icon:Search},{id:'history',name:'讲解履历',icon:History},{id:'offline',name:'离线资料',icon:Download}]as const).map(n=><button key={n.id} className={'nav '+(view===n.id&&!guide?'active':'')} onClick={()=>navigate(n.id)}><n.icon/>{n.name}</button>)}<button className="rail-bottom" onClick={()=>setSettings(true)}><Settings size={18}/>语音与设置</button></Sidebar><section className="main"><div className="section-top"><span className="eyebrow">{guide?'ARTWORK / 作品讲解':view==='explore'?'EXPLORE / 探索作品':view==='history'?'COLLECTION / 讲解履历':'OFFLINE / 离线资料'}</span><span className="quiet">{!online?<><WifiOff size={14}/> 离线模式</>:'电脑体验版 · 中文语音'}</span></div>{notice&&<div className="notice" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={()=>setNotice('')}><X size={16}/></button></div>}{job&&<div className="job-panel" role="status"><LoaderCircle className="spin"/><div><strong>{job.kind==='resolve'?'正在寻找你描述的作品':'正在准备作品讲解'}</strong><p>{job.state==='research'?'查找资料与来源…':job.state==='formatting'?'整理介绍文字…':'正在处理…'} 可以稍后返回继续。</p></div><Button variant="outline" onClick={cancel}>取消</Button></div>}
- {!guide&&view==='explore'&&<><h1>此刻，走近一件作品。</h1><p className="intro">一个名字，一点线索。发现眼前艺术背后的故事。</p><form className="search-panel" onSubmit={e=>{e.preventDefault();void search();}}><label htmlFor="art-query">你正在看什么作品？</label><div className="query-row"><Search/><input id="art-query" value={query} onChange={e=>setQuery(e.target.value)} maxLength={1000} placeholder="作品名称、作者，或你记得的细节…"/><Button type="submit" disabled={!!job||!!busy}>{busy==='search'?<LoaderCircle className="spin"/>:null}探索作品 <ArrowUpRight/></Button></div><div className="search-bottom"><span>支持中文 / 日本語 / English</span><div className="choices"><Globe size={14}/><Picker label="介绍语言" value={language} onChange={s=>setLanguage(s as Language)} items={Object.entries(languages).map(([value,label])=>({value,label}))}/><Clock size={14}/><Picker label="讲解时长" value={String(duration)} onChange={s=>setDuration(Number(s)as Duration)} items={[2,5,15].map(n=>({value:String(n),label:`约 ${n} 分钟`}))}/></div></div>{language!=='zh'&&<p className="small-note">本版日文、英文仅提供文字介绍。</p>}</form>{candidateMessage&&!candidates.length&&<p className="notice">{candidateMessage}</p>}{!!candidates.length&&<div className="candidate-panel"><h2>你指的是哪一件作品？</h2><p className="quiet">确认后生成 {languages[language]} · 约 {duration} 分钟的介绍。</p><RadioGroup value={selected} onValueChange={v=>setSelected(String(v))} aria-label="确认作品">{candidates.map((c,i)=><label key={i} className="candidate"><RadioGroupItem value={String(i)}/><div><strong>{c.title}</strong><p>{c.creator} · {c.year} · {c.type}</p><p>{c.summary}</p><a href={c.sourceUrl} target="_blank" rel="noreferrer">核对来源 <ExternalLink size={12}/></a></div></label>)}</RadioGroup><Button onClick={generate} disabled={!!busy||!!job}>确认作品，生成介绍 <ArrowUpRight/></Button></div>}<div className="section-top featured-label"><span className="eyebrow">从这里开始</span><span className="quiet">精选体验 · 无需生成</span></div><article className="feature"><div className="feature-art"><ArtImage guide={demoGuide}/><span className="image-tag">绘画 / PAINTING</span></div><div className="feature-copy"><div className="eyebrow gold">FLORENCE, ITALY · 约 1485</div><h2>维纳斯的诞生</h2><p className="original">The Birth of Venus</p><p className="artist">桑德罗·波提切利<br/><span>乌菲齐美术馆 · 意大利</span></p><p className="description">从海风、玫瑰与流动的线条，走进文艺复兴对美的想象。</p><Button className="listen" onClick={openDemo}><Headphones/>打开中文讲解 <ArrowUpRight/></Button><p className="small-note"><Sparkles size={14}/> 编辑示例 · 约 2 分钟 · 本机履历</p></div></article><footer className="footnote">每一次凝视，都可以更深一点。<a href={demoGuide.imageSource!} target="_blank" rel="noreferrer">图片：Wikimedia Commons · 公共领域</a></footer></>}
- {guide&&<GuideDetail guide={guide} row={selectedRow} speech={speech} busy={busy==='download'} online={online} onBack={()=>{speech.stop();setGuide(null);}} onDownload={()=>saveOffline(guide)} onRemove={()=>selectedRow&&unDownload(selectedRow)} onSettings={()=>setSettings(true)}/>}
- {!guide&&view!=='explore'&&<><h1>{view==='history'?'让喜欢的作品，留在身边。':'把故事，带进美术馆。'}</h1><div className="list-intro"><p className="intro">{view==='history'?(owner==='guest'?'精选示例保存在本机。登录后，新生成讲解会同步到账号。':'账号履历与本机示例。重新打开即可继续阅读。'):'保存文字与图片；中文声音由设备即时提供，不保存音频。'}</p>{view==='history'&&config.user&&<Button variant="outline" onClick={sync}><RefreshCw/>同步</Button>}</div>{!visibleRows.length?<div className="empty-state">{view==='offline'?<Download/>:<History/>}<h2>{view==='offline'?'还没有离线资料':'艺术旅程，从一件作品开始'}</h2><p>{view==='offline'?'打开一篇讲解，选择“保存离线”。':'探索作品，或先打开精选中文讲解。'}</p><Button variant="outline" onClick={()=>navigate('explore')}>去探索 <ArrowUpRight/></Button></div>:<div className="history-list">{visibleRows.map(r=><article className="history-row" key={r.key}><button className="history-open" onClick={()=>{speech.stop();setGuide(r.guide);}}><ArtImage guide={r.guide} row={r}/><div><h3>{r.guide.title}</h3><p>{r.guide.creator} · {languages[r.guide.language]} · 约 {r.guide.duration} 分钟</p><time>{date(r.guide.createdAt)}</time><div className="badges">{r.guide.demo&&<span>本机示例</span>}{r.offline&&<span><Check size={12}/> 已保存 · {size(r.bytes)}</span>}{r.pending&&<span>{r.conflict?'标题同步冲突':'等待同步'}</span>}</div></div></button><div className="row-actions"><Button variant="ghost" size="icon" aria-label={`修改 ${r.guide.title} 的标题`} onClick={()=>{setRename(r);setNewTitle(r.guide.title);}}><Pencil/></Button>{view==='offline'?<Button variant="ghost" size="icon" aria-label="移除离线下载" onClick={()=>unDownload(r)}><X/></Button>:<Button variant="ghost" size="icon" aria-label={`删除 ${r.guide.title}`} onClick={()=>setDeleting(r)}><Trash2/></Button>}</div></article>)}</div>}</>}
- </section></SidebarProvider>{guide?.language==='zh'&&<Player guide={guide} speech={speech}/>}
- <Dialog open={login} onOpenChange={setLogin}><DialogContent className="modal"><DialogTitle>把艺术旅程保存到你的账号</DialogTitle><DialogDescription>使用 Google 登录后，可以生成新讲解并同步履历。离线资料仍保存在当前设备。</DialogDescription>{config.googleClientId?<div ref={googleRef} className="google-button"/>:<div className="setup-note">Google 登录尚未启用。管理员配置完成后即可登录；现在可以先体验精选讲解。</div>}<Button variant="outline" onClick={()=>{setLogin(false);void openDemo();}}>先体验中文讲解</Button></DialogContent></Dialog>
- <Dialog open={settings} onOpenChange={setSettings}><DialogContent className="modal"><DialogTitle>语音与设置</DialogTitle><DialogDescription>语音只在当前设备即时处理，不保存音频，也不使用收费语音服务。</DialogDescription><div className="setting-block"><h3>中文朗读引擎</h3><Picker label="选择朗读引擎" value={speech.engine} onChange={value=>speech.setEngine(value as SpeechEngine)} items={[{value:'edge',label:'Edge 在线自然声（有网默认）'},{value:'cosyvoice',label:'本地 CosyVoice 2（离线推荐）'},{value:'system',label:'Windows 系统声音（备用）'}]}/>{speech.engine==='edge'?<div className="voice-setup"><p>联网时优先使用微软 Edge 在线自然声，极度流畅且无延迟；断网时自动切换到本地 CosyVoice 2 声音。</p><p className="quiet">免费、自然、无需预下载模型。声音由微软 Edge 服务提供。</p></div>:speech.engine==='cosyvoice'?<div className="voice-setup"><p>阿里开源 CosyVoice 2 中文自然声。离线断网状态下提供高拟真、富有表现力的中文朗读。</p><div style={{display:'flex',flexDirection:'column',gap:'8px',marginTop:'8px'}}><label style={{fontSize:'13px',color:'var(--muted,#666)'}} htmlFor="cosyvoice-url">本地服务地址</label><input id="cosyvoice-url" className="text-input" style={{padding:'6px 10px',fontSize:'13px'}} value={speech.cosyVoiceUrl} onChange={e=>speech.setCosyVoiceUrl(e.target.value)} placeholder="http://127.0.0.1:9233"/><Button variant="outline" style={{alignSelf:'flex-start'}} disabled={speech.modelState.status==='preparing'} onClick={()=>{void speech.checkCosyVoice().then(ok=>{if(ok)setNotice('已成功连接到本地 CosyVoice 2 服务！');});}}>{speech.modelState.status==='preparing'?<><LoaderCircle className="spin"/>正在测试连接…</>:speech.modelState.status==='ready'?<><Check/>服务连接正常</>:<><RefreshCw/>测试本地服务连接</>}</Button>{speech.modelState.error&&<p className="voice-error">{speech.modelState.error}</p>}</div><p className="quiet" style={{marginTop:'8px'}}>提示：本地启动 CosyVoice 2 服务（默认 9233 端口），断网时将由此服务即时合成语音。</p></div>:<div className="voice-setup"><p>系统声音启动快、占用空间小，音色取决于 Windows 已安装的中文语音。</p>{speech.voices.length?<Picker label="选择中文系统声音" value={speech.voice?.voiceURI??''} onChange={speech.setVoiceURI} items={speech.voices.map(v=>({value:v.voiceURI,label:v.name}))}/>:<p>未找到可用声音。请前往 Windows 设置 → 时间和语言 → 语音，安装中文声音后刷新应用。</p>}<p className="quiet">不同电脑音色可能不同。离线出行前，请断网试读一次。</p></div>}</div><div className="setting-block"><h3>离线资料</h3><p>{rows.filter(r=>r.offline).length} 篇 · {size(rows.reduce((n,r)=>n+r.bytes,0))}</p><p className="quiet">{shellReady?'离线页面已准备。':'离线页面准备中。'}</p></div><div className="setting-block"><h3>账号与生成</h3><p>{config.user?config.user.email:'尚未登录 Google 账号'}</p><p className="quiet">{config.generationReady?'作品生成服务已配置。':'作品生成服务尚未配置，目前可体验精选讲解。'}</p>{config.user&&<Button variant="outline" onClick={logout}><LogOut/>退出并清理本机账号资料</Button>}</div></DialogContent></Dialog>
- <Dialog open={!!rename} onOpenChange={open=>!open&&setRename(null)}><DialogContent className="modal"><DialogTitle>{rename?.conflict?'处理标题冲突':'修改履历标题'}</DialogTitle><DialogDescription>{rename?.conflict?`另一设备的标题是“${rename.conflict.title}”。你可以保存下方标题，或采用另一设备的标题。`:'只修改履历名称，不改变作品与介绍内容。'}</DialogDescription><label htmlFor="rename-title">标题</label><input className="text-input" id="rename-title" value={newTitle} onChange={e=>setNewTitle(e.target.value)} maxLength={100}/><DialogFooter>{rename?.conflict&&<Button variant="outline" onClick={async()=>{await putLocal({...rename,pending:undefined,conflict:undefined,guide:{...rename.guide,title:rename.conflict!.title,version:rename.conflict!.version}});setRename(null);await refresh();}}>采用云端标题</Button>}<Button onClick={doRename}>保存标题</Button></DialogFooter></DialogContent></Dialog>
- <AlertDialog open={!!deleting} onOpenChange={open=>!open&&setDeleting(null)}><AlertDialogContent><AlertDialogTitle>删除这篇讲解？</AlertDialogTitle><AlertDialogDescription>“{deleting?.guide.title}”将从履历和当前设备中移除。{!online?'联网后同步删除。':''}此操作无法撤销。</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><Button variant="destructive" onClick={doDelete}>删除讲解</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
- </main>;
+  if (!r.ok) throw new Error(data.error ?? '操作失败，请重试。');
+  return data;
 }
-
+function post(data: unknown): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  };
+}
+export default function Florence() {
+  const [view, setView] = useState<View>('explore'),
+    [guide, setGuide] = useState<Guide | null>(null),
+    [query, setQuery] = useState(''),
+    [language, setLanguage] = useState<Language>('zh'),
+    [duration, setDuration] = useState<Duration>(5);
+  const [config, setConfig] = useState<Config>({
+      googleClientId: '',
+      generationReady: false,
+      user: null,
+    }),
+    [configLoaded, setConfigLoaded] = useState(false),
+    [owner, setOwner] = useState('guest');
+  const ownerRef = useRef(owner);
+  const [rows, setRows] = useState<LocalGuide[]>([]),
+    [online, setOnline] = useState(true),
+    [notice, setNotice] = useState(''),
+    [busy, setBusy] = useState(''),
+    [settings, setSettings] = useState(false),
+    [login, setLogin] = useState(false),
+    [rename, setRename] = useState<LocalGuide | null>(null),
+    [newTitle, setNewTitle] = useState(''),
+    [deleting, setDeleting] = useState<LocalGuide | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]),
+    [resolveId, setResolveId] = useState(''),
+    [selected, setSelected] = useState('0'),
+    [job, setJob] = useState<{
+      id: string;
+      kind: 'resolve' | 'generate';
+      state: string;
+    } | null>(null),
+    [candidateMessage, setCandidateMessage] = useState(''),
+    [shellReady, setShellReady] = useState(false);
+  const googleRef = useRef<HTMLDivElement>(null);
+  const speech = useSpeech(
+    guide?.language === 'zh' ? guide.speech : '',
+    `${owner}:${guide?.id ?? 'none'}`,
+  );
+  useEffect(() => {
+    ownerRef.current = owner;
+  }, [owner]);
+  const refresh = useCallback(async () => {
+    try {
+      const current = ownerRef.current;
+      const r = await listLocal(current);
+      if (current === ownerRef.current) setRows(r);
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  }, []);
+  const sync = useCallback(async () => {
+    const current = ownerRef.current;
+    if (current === 'guest') return;
+    try {
+      const result = await syncHistory(current);
+      if (ownerRef.current === current) setRows(result);
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    const saved = localStorage.getItem('tf-owner');
+    if (saved) setOwner(saved);
+    const net = () => setOnline(navigator.onLine);
+    net();
+    window.addEventListener('online', net);
+    window.addEventListener('offline', net);
+    if ('serviceWorker' in navigator) {
+      const localPreview =
+        location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (localPreview)
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((registrations) =>
+            Promise.all(
+              registrations.map((registration) => registration.unregister()),
+            ),
+          )
+          .catch(() => {});
+      else
+        navigator.serviceWorker
+          .register('/sw.js')
+          .then(() => navigator.serviceWorker.ready)
+          .then(() => setShellReady(true))
+          .catch(() => setNotice('离线页面暂未准备好，请保持联网使用。'));
+    }
+    api('/api/config')
+      .then(async (c: Config) => {
+        const previous = localStorage.getItem('tf-owner');
+        if (previous && previous !== c.user?.id) {
+          await clearOwner(previous);
+          localStorage.removeItem('tf-owner');
+        }
+        setConfig(c);
+        setOwner(c.user?.id ?? 'guest');
+        if (c.user) localStorage.setItem('tf-owner', c.user.id);
+        setConfigLoaded(true);
+      })
+      .catch(() => {
+        setConfigLoaded(true);
+        setNotice('当前无法连接账号服务，仍可打开本机已保存资料。');
+      });
+    return () => {
+      window.removeEventListener('online', net);
+      window.removeEventListener('offline', net);
+    };
+  }, []);
+  useEffect(() => {
+    void refresh();
+    if (owner !== 'guest' && online) void sync();
+    const active = localStorage.getItem('tf-job:' + owner);
+    if (active) {
+      try {
+        setJob(JSON.parse(active));
+      } catch {
+        localStorage.removeItem('tf-job:' + owner);
+      }
+    } else setJob(null);
+  }, [owner, online, refresh, sync]);
+  useEffect(() => {
+    if (job) localStorage.setItem('tf-job:' + owner, JSON.stringify(job));
+  }, [job, owner]);
+  useEffect(() => {
+    if (!job || !online || owner === 'guest') return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const next: Job = await api('/api/jobs/' + job.id);
+        if (!alive) return;
+        if (next.state === 'completed') {
+          setJob(null);
+          localStorage.removeItem('tf-job:' + owner);
+          if (next.kind === 'resolve') {
+            const result = next.result as {
+              candidates: Candidate[];
+              message: string;
+            };
+            setCandidates(result.candidates);
+            setCandidateMessage(result.message);
+            setResolveId(next.id);
+            setSelected('0');
+          } else {
+            setGuide(next.result as Guide);
+            setCandidates([]);
+            setView('explore');
+            await sync();
+            setNotice('讲解已生成并保存到履历。');
+          }
+          return;
+        }
+        if (['failed', 'cancelled'].includes(next.state)) {
+          setNotice(next.error || '任务已取消。');
+          setJob(null);
+          localStorage.removeItem('tf-job:' + owner);
+          return;
+        }
+        setJob((j) => (j ? { ...j, state: next.state } : j));
+        timer = setTimeout(poll, 3500);
+      } catch (e) {
+        if (alive) {
+          setNotice((e as Error).message);
+          timer = setTimeout(poll, 10000);
+        }
+      }
+    };
+    timer = setTimeout(poll, 1000);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [job?.id, online, owner, sync]);
+  useEffect(() => {
+    if (!login || !config.googleClientId) return;
+    let stopped = false;
+    const initialize = async () => {
+      try {
+        const { nonce } = await api('/api/auth/nonce', post({}));
+        if (stopped) return;
+        const google = (window as any).google;
+        google.accounts.id.initialize({
+          client_id: config.googleClientId,
+          nonce,
+          callback: async (response: { credential: string }) => {
+            try {
+              const result = await api('/api/auth/google', post(response));
+              speech.stop();
+              setGuide(null);
+              setRows([]);
+              setOwner(result.user.id);
+              localStorage.setItem('tf-owner', result.user.id);
+              setConfig((c) => ({ ...c, user: result.user }));
+              setLogin(false);
+              setNotice('已登录，履历将同步到你的账号。');
+            } catch (e) {
+              setNotice((e as Error).message);
+            }
+          },
+        });
+        if (googleRef.current)
+          google.accounts.id.renderButton(googleRef.current, {
+            theme: 'outline',
+            size: 'large',
+            text: 'signin_with',
+            locale: 'zh_CN',
+          });
+      } catch (e) {
+        setNotice((e as Error).message);
+      }
+    };
+    if ((window as any).google) void initialize();
+    else {
+      let script = document.getElementById(
+        'google-identity',
+      ) as HTMLScriptElement | null;
+      if (!script) {
+        script = document.createElement('script');
+        script.id = 'google-identity';
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        document.head.appendChild(script);
+      }
+      script.onload = () => void initialize();
+      script.onerror = () => setNotice('无法连接 Google，请检查网络后重试。');
+    }
+    return () => {
+      stopped = true;
+    };
+  }, [login, config.googleClientId]);
+  function navigate(v: View) {
+    speech.stop();
+    setGuide(null);
+    setView(v);
+    setNotice('');
+    void refresh();
+  }
+  async function openDemo() {
+    speech.stop();
+    const old = rows.find((r) => r.guide.id === demoGuide.id);
+    const g = old?.guide ?? {
+      ...demoGuide,
+      createdAt: new Date().toISOString(),
+    };
+    setGuide(g);
+    setView('explore');
+    await putLocal(
+      old ?? {
+        key: `${owner}:${g.id}`,
+        owner,
+        guide: g,
+        offline: false,
+        bytes: 0,
+      },
+    ).catch((e) => setNotice(e.message));
+    await refresh();
+  }
+  async function search() {
+    setNotice('');
+    if (!query.trim()) return setNotice('请先输入作品名称、作者或一些线索。');
+    if (!online) return setNotice('识别新作品需要联网，已有资料可以离线打开。');
+    if (!config.user) {
+      setLogin(true);
+      return;
+    }
+    if (!config.generationReady)
+      return setNotice('作品生成服务尚未配置，可先打开精选中文讲解体验。');
+    const id = crypto.randomUUID();
+    setBusy('search');
+    setCandidates([]);
+    setCandidateMessage('');
+    try {
+      const result = await api(
+        '/api/jobs',
+        post({ id, kind: 'resolve', query }),
+      );
+      setJob({ id, kind: 'resolve', state: result.state });
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+  async function generate() {
+    const id = crypto.randomUUID();
+    setBusy('generate');
+    try {
+      const result = await api(
+        '/api/jobs',
+        post({
+          id,
+          kind: 'generate',
+          resolveId,
+          candidateIndex: Number(selected),
+          language,
+          duration,
+        }),
+      );
+      setJob({ id, kind: 'generate', state: result.state });
+      setCandidates([]);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+  async function cancel() {
+    if (!job) return;
+    try {
+      await api('/api/jobs/' + job.id, { method: 'DELETE' });
+      localStorage.removeItem('tf-job:' + owner);
+      setJob(null);
+      setNotice('已取消；已发出的文字服务请求可能仍计费。');
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  }
+  async function saveOffline(g: Guide) {
+    setBusy('download');
+    try {
+      await downloadGuide(
+        owner,
+        g,
+        rows.find((r) => r.guide.id === g.id),
+      );
+      await refresh();
+      setNotice('文字与图片已保存。离线收听还需本机中文声音。');
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+  async function unDownload(r: LocalGuide) {
+    try {
+      await putLocal({
+        ...r,
+        offline: false,
+        imageBlob: undefined,
+        imageHash: undefined,
+        bytes: 0,
+      });
+      await refresh();
+      setNotice('已移除本机下载，履历仍保留。');
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  }
+  async function doRename() {
+    if (!rename) return;
+    try {
+      const title = validateTitle(newTitle);
+      const next = {
+        ...rename,
+        guide: {
+          ...rename.guide,
+          title,
+          version: rename.conflict?.version ?? rename.guide.version,
+        },
+        pending: rename.guide.demo ? undefined : ('rename' as const),
+        conflict: undefined,
+      };
+      await putLocal(next);
+      setRename(null);
+      if (guide?.id === next.guide.id) setGuide(next.guide);
+      await refresh();
+      if (online && !next.guide.demo) await sync();
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  }
+  async function doDelete() {
+    if (!deleting) return;
+    try {
+      if (deleting.guide.demo) await removeLocal(deleting.key);
+      else
+        await putLocal({
+          ...deleting,
+          pending: 'delete',
+          offline: false,
+          imageBlob: undefined,
+          bytes: 0,
+        });
+      if (guide?.id === deleting.guide.id) {
+        speech.stop();
+        setGuide(null);
+      }
+      setDeleting(null);
+      await refresh();
+      if (online) await sync();
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  }
+  async function logout() {
+    try {
+      await api('/api/auth/logout', post({}));
+      speech.stop();
+      await clearOwner(owner);
+      for (const key of Object.keys(localStorage))
+        if (
+          key.startsWith('tf-bookmark:' + owner + ':') ||
+          key === 'tf-job:' + owner
+        )
+          localStorage.removeItem(key);
+      localStorage.removeItem('tf-owner');
+      setOwner('guest');
+      setRows([]);
+      setGuide(null);
+      setConfig((c) => ({ ...c, user: null }));
+      setSettings(false);
+    } catch {
+      setNotice('退出未完成，请联网重试，以结束账号会话。');
+    }
+  }
+  const selectedRow = rows.find((r) => r.guide.id === guide?.id),
+    visibleRows = rows
+      .filter(
+        (r) => r.pending !== 'delete' && (view !== 'offline' || r.offline),
+      )
+      .sort((a, b) => b.guide.createdAt.localeCompare(a.guide.createdAt));
+  useEffect(() => {
+    const context = (document as any).modelContext;
+    if (!context?.registerTool) return;
+    const lifecycle = new AbortController();
+    Promise.resolve(
+      context.registerTool(
+        {
+          name: 'stage_artwork_search',
+          title: '填写作品线索',
+          description:
+            'Fill the visible artwork search form. Does not submit or spend credits.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', minLength: 1, maxLength: 1000 },
+            },
+            required: ['query'],
+            additionalProperties: false,
+          },
+          annotations: { readOnlyHint: false, untrustedContentHint: false },
+          execute: async (input: unknown) => {
+            const q = (input as any)?.query;
+            if (typeof q !== 'string' || !q.trim() || q.length > 1000)
+              throw new Error('请输入 1–1000 字线索。');
+            window.speechSynthesis?.cancel();
+            setGuide(null);
+            setView('explore');
+            setQuery(q);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            return { query: q, submitted: false };
+          },
+        },
+        { signal: lifecycle.signal },
+      ),
+    ).catch(() => {});
+    return () => lifecycle.abort();
+  }, []);
+  return (
+    <main className="shell">
+      <header className="topbar">
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+          <a className="brand" href="/" aria-label="Timeless Florence 首页">
+            <Landmark />
+            <span>
+              Timeless <i>Florence</i>
+            </span>
+          </a>
+          <span
+            style={{
+              fontSize: '12px',
+              color: '#8c9c93',
+              fontFamily: 'monospace',
+            }}
+          >
+            {RELEASE_VERSION}
+          </span>
+        </div>
+        <span className="edition">ART, BEYOND TIME</span>
+        <Button
+          variant="outline"
+          onClick={() => (config.user ? setSettings(true) : setLogin(true))}
+          disabled={!configLoaded}
+        >
+          {config.user ? config.user.name : 'Google 账号登录'}
+        </Button>
+      </header>
+      <SidebarProvider
+        className="workspace"
+        style={{ '--sidebar-width': '216px' } as React.CSSProperties}
+      >
+        <Sidebar collapsible="none" className="rail">
+          <div className="eyebrow">你的艺术旅程</div>
+          {(
+            [
+              { id: 'explore', name: '探索作品', icon: Search },
+              { id: 'history', name: '讲解履历', icon: History },
+              { id: 'offline', name: '离线资料', icon: Download },
+            ] as const
+          ).map((n) => (
+            <button
+              key={n.id}
+              className={'nav ' + (view === n.id && !guide ? 'active' : '')}
+              onClick={() => navigate(n.id)}
+            >
+              <n.icon />
+              {n.name}
+            </button>
+          ))}
+          <button className="rail-bottom" onClick={() => setSettings(true)}>
+            <Settings size={18} />
+            语音与设置
+          </button>
+        </Sidebar>
+        <section className="main">
+          <div className="section-top">
+            <span className="eyebrow">
+              {guide
+                ? 'ARTWORK / 作品讲解'
+                : view === 'explore'
+                  ? 'EXPLORE / 探索作品'
+                  : view === 'history'
+                    ? 'COLLECTION / 讲解履历'
+                    : 'OFFLINE / 离线资料'}
+            </span>
+            <span className="quiet">
+              {!online ? (
+                <>
+                  <WifiOff size={14} /> 离线模式
+                </>
+              ) : (
+                '电脑体验版 · 中文语音'
+              )}
+            </span>
+          </div>
+          {notice && (
+            <div className="notice" role="status">
+              <span>{notice}</span>
+              <button aria-label="关闭提示" onClick={() => setNotice('')}>
+                <X size={16} />
+              </button>
+            </div>
+          )}
+          {job && (
+            <div className="job-panel" role="status">
+              <LoaderCircle className="spin" />
+              <div>
+                <strong>
+                  {job.kind === 'resolve'
+                    ? '正在寻找你描述的作品'
+                    : '正在准备作品讲解'}
+                </strong>
+                <p>
+                  {job.state === 'research'
+                    ? '查找资料与来源…'
+                    : job.state === 'formatting'
+                      ? '整理介绍文字…'
+                      : '正在处理…'}{' '}
+                  可以稍后返回继续。
+                </p>
+              </div>
+              <Button variant="outline" onClick={cancel}>
+                取消
+              </Button>
+            </div>
+          )}
+          {!guide && view === 'explore' && (
+            <>
+              <h1>此刻，走近一件作品。</h1>
+              <p className="intro">
+                一个名字，一点线索。发现眼前艺术背后的故事。
+              </p>
+              <form
+                className="search-panel"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void search();
+                }}
+              >
+                <label htmlFor="art-query">你正在看什么作品？</label>
+                <div className="query-row">
+                  <Search />
+                  <input
+                    id="art-query"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    maxLength={1000}
+                    placeholder="作品名称、作者，或你记得的细节…"
+                  />
+                  <Button type="submit" disabled={!!job || !!busy}>
+                    {busy === 'search' ? (
+                      <LoaderCircle className="spin" />
+                    ) : null}
+                    探索作品 <ArrowUpRight />
+                  </Button>
+                </div>
+                <div className="search-bottom">
+                  <span>支持中文 / 日本語 / English</span>
+                  <div className="choices">
+                    <Globe size={14} />
+                    <Picker
+                      label="介绍语言"
+                      value={language}
+                      onChange={(s) => setLanguage(s as Language)}
+                      items={Object.entries(languages).map(
+                        ([value, label]) => ({ value, label }),
+                      )}
+                    />
+                    <Clock size={14} />
+                    <Picker
+                      label="讲解时长"
+                      value={String(duration)}
+                      onChange={(s) => setDuration(Number(s) as Duration)}
+                      items={[2, 5, 15].map((n) => ({
+                        value: String(n),
+                        label: `约 ${n} 分钟`,
+                      }))}
+                    />
+                  </div>
+                </div>
+                {language !== 'zh' && (
+                  <p className="small-note">本版日文、英文仅提供文字介绍。</p>
+                )}
+              </form>
+              {candidateMessage && !candidates.length && (
+                <p className="notice">{candidateMessage}</p>
+              )}
+              {!!candidates.length && (
+                <div className="candidate-panel">
+                  <h2>你指的是哪一件作品？</h2>
+                  <p className="quiet">
+                    确认后生成 {languages[language]} · 约 {duration}{' '}
+                    分钟的介绍。
+                  </p>
+                  <RadioGroup
+                    value={selected}
+                    onValueChange={(v) => setSelected(String(v))}
+                    aria-label="确认作品"
+                  >
+                    {candidates.map((c, i) => (
+                      <label key={i} className="candidate">
+                        <RadioGroupItem value={String(i)} />
+                        <div>
+                          <strong>{c.title}</strong>
+                          <p>
+                            {c.creator} · {c.year} · {c.type}
+                          </p>
+                          <p>{c.summary}</p>
+                          <a
+                            href={c.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            核对来源 <ExternalLink size={12} />
+                          </a>
+                        </div>
+                      </label>
+                    ))}
+                  </RadioGroup>
+                  <Button onClick={generate} disabled={!!busy || !!job}>
+                    确认作品，生成介绍 <ArrowUpRight />
+                  </Button>
+                </div>
+              )}
+              <div className="section-top featured-label">
+                <span className="eyebrow">从这里开始</span>
+                <span className="quiet">精选体验 · 无需生成</span>
+              </div>
+              <article className="feature">
+                <div className="feature-art">
+                  <ArtImage guide={demoGuide} />
+                  <span className="image-tag">绘画 / PAINTING</span>
+                </div>
+                <div className="feature-copy">
+                  <div className="eyebrow gold">FLORENCE, ITALY · 约 1485</div>
+                  <h2>维纳斯的诞生</h2>
+                  <p className="original">The Birth of Venus</p>
+                  <p className="artist">
+                    桑德罗·波提切利
+                    <br />
+                    <span>乌菲齐美术馆 · 意大利</span>
+                  </p>
+                  <p className="description">
+                    从海风、玫瑰与流动的线条，走进文艺复兴对美的想象。
+                  </p>
+                  <Button className="listen" onClick={openDemo}>
+                    <Headphones />
+                    打开中文讲解 <ArrowUpRight />
+                  </Button>
+                  <p className="small-note">
+                    <Sparkles size={14} /> 编辑示例 · 约 2 分钟 · 本机履历
+                  </p>
+                </div>
+              </article>
+              <footer className="footnote">
+                每一次凝视，都可以更深一点。
+                <a
+                  href={demoGuide.imageSource!}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  图片：Wikimedia Commons · 公共领域
+                </a>
+              </footer>
+            </>
+          )}
+          {guide && (
+            <GuideDetail
+              guide={guide}
+              row={selectedRow}
+              speech={speech}
+              busy={busy === 'download'}
+              online={online}
+              onBack={() => {
+                speech.stop();
+                setGuide(null);
+              }}
+              onDownload={() => saveOffline(guide)}
+              onRemove={() => selectedRow && unDownload(selectedRow)}
+              onSettings={() => setSettings(true)}
+            />
+          )}
+          {!guide && view !== 'explore' && (
+            <>
+              <h1>
+                {view === 'history'
+                  ? '让喜欢的作品，留在身边。'
+                  : '把故事，带进美术馆。'}
+              </h1>
+              <div className="list-intro">
+                <p className="intro">
+                  {view === 'history'
+                    ? owner === 'guest'
+                      ? '精选示例保存在本机。登录后，新生成讲解会同步到账号。'
+                      : '账号履历与本机示例。重新打开即可继续阅读。'
+                    : '保存文字与图片；中文声音由设备即时提供，不保存音频。'}
+                </p>
+                {view === 'history' && config.user && (
+                  <Button variant="outline" onClick={sync}>
+                    <RefreshCw />
+                    同步
+                  </Button>
+                )}
+              </div>
+              {!visibleRows.length ? (
+                <div className="empty-state">
+                  {view === 'offline' ? <Download /> : <History />}
+                  <h2>
+                    {view === 'offline'
+                      ? '还没有离线资料'
+                      : '艺术旅程，从一件作品开始'}
+                  </h2>
+                  <p>
+                    {view === 'offline'
+                      ? '打开一篇讲解，选择“保存离线”。'
+                      : '探索作品，或先打开精选中文讲解。'}
+                  </p>
+                  <Button variant="outline" onClick={() => navigate('explore')}>
+                    去探索 <ArrowUpRight />
+                  </Button>
+                </div>
+              ) : (
+                <div className="history-list">
+                  {visibleRows.map((r) => (
+                    <article className="history-row" key={r.key}>
+                      <button
+                        className="history-open"
+                        onClick={() => {
+                          speech.stop();
+                          setGuide(r.guide);
+                        }}
+                      >
+                        <ArtImage guide={r.guide} row={r} />
+                        <div>
+                          <h3>{r.guide.title}</h3>
+                          <p>
+                            {r.guide.creator} · {languages[r.guide.language]} ·
+                            约 {r.guide.duration} 分钟
+                          </p>
+                          <time>{date(r.guide.createdAt)}</time>
+                          <div className="badges">
+                            {r.guide.demo && <span>本机示例</span>}
+                            {r.offline && (
+                              <span>
+                                <Check size={12} /> 已保存 · {size(r.bytes)}
+                              </span>
+                            )}
+                            {r.pending && (
+                              <span>
+                                {r.conflict ? '标题同步冲突' : '等待同步'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                      <div className="row-actions">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`修改 ${r.guide.title} 的标题`}
+                          onClick={() => {
+                            setRename(r);
+                            setNewTitle(r.guide.title);
+                          }}
+                        >
+                          <Pencil />
+                        </Button>
+                        {view === 'offline' ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="移除离线下载"
+                            onClick={() => unDownload(r)}
+                          >
+                            <X />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`删除 ${r.guide.title}`}
+                            onClick={() => setDeleting(r)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </SidebarProvider>
+      {guide?.language === 'zh' && <Player guide={guide} speech={speech} />}
+      <Dialog open={login} onOpenChange={setLogin}>
+        <DialogContent className="modal">
+          <DialogTitle>把艺术旅程保存到你的账号</DialogTitle>
+          <DialogDescription>
+            使用 Google
+            登录后，可以生成新讲解并同步履历。离线资料仍保存在当前设备。
+          </DialogDescription>
+          {config.googleClientId ? (
+            <div ref={googleRef} className="google-button" />
+          ) : (
+            <div className="setup-note">
+              Google
+              登录尚未启用。管理员配置完成后即可登录；现在可以先体验精选讲解。
+            </div>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => {
+              setLogin(false);
+              void openDemo();
+            }}
+          >
+            先体验中文讲解
+          </Button>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={settings} onOpenChange={setSettings}>
+        <DialogContent className="modal">
+          <DialogTitle>语音与设置</DialogTitle>
+          <DialogDescription>
+            语音只在当前设备即时处理，不保存音频，也不使用收费语音服务。
+          </DialogDescription>
+          <div className="setting-block">
+            <h3>中文朗读引擎</h3>
+            <Picker
+              label="选择朗读引擎"
+              value={speech.engine}
+              onChange={(value) => speech.setEngine(value as SpeechEngine)}
+              items={[
+                { value: 'edge', label: 'Edge 在线自然声（有网默认）' },
+                { value: 'qwen', label: '本地 Qwen3-TTS 高保真（离线）' },
+                { value: 'system', label: 'Windows 系统声音（备用）' },
+              ]}
+            />
+            {speech.engine === 'edge' ? (
+              <div className="voice-setup">
+                <p>
+                  联网时优先使用微软 Edge
+                  在线自然声。离线时请选择本地 Qwen3-TTS 或 Windows 系统声音。
+                </p>
+                <p className="quiet">
+                  免费、自然、无需预下载模型。声音由微软 Edge 服务提供。
+                </p>
+              </div>
+            ) : speech.engine === 'qwen' ? (
+              <div className="voice-setup">
+                <p>
+                  Qwen3-TTS-12Hz-1.7B-CustomVoice 中文高保真朗读。模型仅在当前电脑运行，离线时也可使用。
+                </p>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    marginTop: '8px',
+                  }}
+                >
+                  <label
+                    style={{ fontSize: '13px', color: 'var(--muted,#666)' }}
+                    htmlFor="qwen-tts-url"
+                  >
+                    本地服务地址
+                  </label>
+                  <input
+                    id="qwen-tts-url"
+                    className="text-input"
+                    style={{ padding: '6px 10px', fontSize: '13px' }}
+                    value={speech.qwenUrl}
+                    onChange={(e) => speech.setQwenUrl(e.target.value)}
+                    placeholder="http://127.0.0.1:9233"
+                  />
+                  <Button
+                    variant="outline"
+                    style={{ alignSelf: 'flex-start' }}
+                    disabled={speech.modelState.status === 'preparing'}
+                    onClick={() => {
+                      void speech.checkQwen().then((ok) => {
+                        if (ok)
+                          setNotice('已成功连接到本地 Qwen3-TTS 服务！');
+                      });
+                    }}
+                  >
+                    {speech.modelState.status === 'preparing' ? (
+                      <>
+                        <LoaderCircle className="spin" />
+                        正在测试连接…
+                      </>
+                    ) : speech.modelState.status === 'ready' ? (
+                      <>
+                        <Check />
+                        服务连接正常
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw />
+                        测试本地服务连接
+                      </>
+                    )}
+                  </Button>
+                  {speech.modelState.error && (
+                    <p className="voice-error">{speech.modelState.error}</p>
+                  )}
+                </div>
+                <p className="quiet" style={{ marginTop: '8px' }}>
+                  提示：启动项目中提供的 Qwen3-TTS 本机服务（默认 9233 端口），断网时将由此服务即时合成语音。
+                </p>
+              </div>
+            ) : (
+              <div className="voice-setup">
+                <p>
+                  系统声音启动快、占用空间小，音色取决于 Windows
+                  已安装的中文语音。
+                </p>
+                {speech.voices.length ? (
+                  <Picker
+                    label="选择中文系统声音"
+                    value={speech.voice?.voiceURI ?? ''}
+                    onChange={speech.setVoiceURI}
+                    items={speech.voices.map((v) => ({
+                      value: v.voiceURI,
+                      label: v.name,
+                    }))}
+                  />
+                ) : (
+                  <p>
+                    未找到可用声音。请前往 Windows 设置 → 时间和语言 →
+                    语音，安装中文声音后刷新应用。
+                  </p>
+                )}
+                <p className="quiet">
+                  不同电脑音色可能不同。离线出行前，请断网试读一次。
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="setting-block">
+            <h3>离线资料</h3>
+            <p>
+              {rows.filter((r) => r.offline).length} 篇 ·{' '}
+              {size(rows.reduce((n, r) => n + r.bytes, 0))}
+            </p>
+            <p className="quiet">
+              {shellReady ? '离线页面已准备。' : '离线页面准备中。'}
+            </p>
+          </div>
+          <div className="setting-block">
+            <h3>账号与生成</h3>
+            <p>{config.user ? config.user.email : '尚未登录 Google 账号'}</p>
+            <p className="quiet">
+              {config.generationReady
+                ? '作品生成服务已配置。'
+                : '作品生成服务尚未配置，目前可体验精选讲解。'}
+            </p>
+            {config.user && (
+              <Button variant="outline" onClick={logout}>
+                <LogOut />
+                退出并清理本机账号资料
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!rename} onOpenChange={(open) => !open && setRename(null)}>
+        <DialogContent className="modal">
+          <DialogTitle>
+            {rename?.conflict ? '处理标题冲突' : '修改履历标题'}
+          </DialogTitle>
+          <DialogDescription>
+            {rename?.conflict
+              ? `另一设备的标题是“${rename.conflict.title}”。你可以保存下方标题，或采用另一设备的标题。`
+              : '只修改履历名称，不改变作品与介绍内容。'}
+          </DialogDescription>
+          <label htmlFor="rename-title">标题</label>
+          <input
+            className="text-input"
+            id="rename-title"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            maxLength={100}
+          />
+          <DialogFooter>
+            {rename?.conflict && (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  await putLocal({
+                    ...rename,
+                    pending: undefined,
+                    conflict: undefined,
+                    guide: {
+                      ...rename.guide,
+                      title: rename.conflict!.title,
+                      version: rename.conflict!.version,
+                    },
+                  });
+                  setRename(null);
+                  await refresh();
+                }}
+              >
+                采用云端标题
+              </Button>
+            )}
+            <Button onClick={doRename}>保存标题</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={!!deleting}
+        onOpenChange={(open) => !open && setDeleting(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>删除这篇讲解？</AlertDialogTitle>
+          <AlertDialogDescription>
+            “{deleting?.guide.title}”将从履历和当前设备中移除。
+            {!online ? '联网后同步删除。' : ''}此操作无法撤销。
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <Button variant="destructive" onClick={doDelete}>
+              删除讲解
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </main>
+  );
+}

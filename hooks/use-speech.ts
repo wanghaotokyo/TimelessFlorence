@@ -4,12 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SentenceSpeaker, type SpeechState } from '@/lib/speech';
 import { splitSentences } from '@/lib/types';
 
-export type SpeechEngine = 'edge' | 'cosyvoice' | 'system';
+export type SpeechEngine = 'edge' | 'qwen' | 'system';
 type ModelStatus = 'idle' | 'preparing' | 'ready' | 'error';
-type ModelState = { status: ModelStatus; progress: number; error: string; cached: boolean };
+type ModelState = {
+  status: ModelStatus;
+  progress: number;
+  error: string;
+  cached: boolean;
+};
 
-const COSYVOICE_URL_KEY = 'tf-cosyvoice-url';
-const DEFAULT_COSYVOICE_URL = 'http://127.0.0.1:9233';
+const QWEN_URL_KEY = 'tf-qwen-tts-url';
+const DEFAULT_QWEN_URL = 'http://127.0.0.1:9233';
 const ENGINE_KEY = 'tf-speech-engine';
 
 function emptyState(): SpeechState {
@@ -24,16 +29,21 @@ export function useSpeech(text: string, identity: string) {
   const [systemState, setSystemState] = useState<SpeechState>(emptyState);
   const systemRef = useRef<SentenceSpeaker | null>(null);
 
-  /* ── Audio engine state (shared by edge + cosyvoice) ── */
+  /* ── Audio engine state (shared by Edge + Qwen) ── */
   const [audioState, setAudioState] = useState<SpeechState>(emptyState);
   const audioEpochRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef('');
   const prefetchRef = useRef<Map<number, Blob>>(new Map());
 
-  /* ── CosyVoice service state ── */
-  const [cosyVoiceUrl, setCosyVoiceUrlState] = useState(DEFAULT_COSYVOICE_URL);
-  const [modelState, setModelState] = useState<ModelState>({ status: 'idle', progress: 0, error: '', cached: true });
+  /* ── Qwen3-TTS service state ── */
+  const [qwenUrl, setQwenUrlState] = useState(DEFAULT_QWEN_URL);
+  const [modelState, setModelState] = useState<ModelState>({
+    status: 'idle',
+    progress: 0,
+    error: '',
+    cached: true,
+  });
 
   /* ── Engine selection ── */
   const [engine, setEngineState] = useState<SpeechEngine>('edge');
@@ -48,36 +58,45 @@ export function useSpeech(text: string, identity: string) {
     setSupported(canUseSystem);
 
     const savedEngine = localStorage.getItem(ENGINE_KEY);
-    if (savedEngine === 'edge' || savedEngine === 'cosyvoice' || savedEngine === 'system') {
+    if (
+      savedEngine === 'edge' ||
+      savedEngine === 'qwen' ||
+      savedEngine === 'system'
+    ) {
       setEngineState(savedEngine);
     } else if (savedEngine === 'natural') {
-      // Migrate old Kokoro setting to edge (or cosyvoice)
+      // Migrate retired local engines to Edge.
       setEngineState('edge');
       localStorage.setItem(ENGINE_KEY, 'edge');
     }
 
-    const savedCosyUrl = localStorage.getItem(COSYVOICE_URL_KEY);
-    if (savedCosyUrl) setCosyVoiceUrlState(savedCosyUrl);
+    const savedQwenUrl = localStorage.getItem(QWEN_URL_KEY);
+    if (savedQwenUrl) setQwenUrlState(savedQwenUrl);
 
     if (!canUseSystem) return;
-    const load = () => setVoices(
-      window.speechSynthesis.getVoices().filter(v => /^zh([_-]|$)/i.test(v.lang) && v.localService),
-    );
+    const load = () =>
+      setVoices(
+        window.speechSynthesis
+          .getVoices()
+          .filter((v) => /^zh([_-]|$)/i.test(v.lang) && v.localService),
+      );
     load();
     window.speechSynthesis.addEventListener('voiceschanged', load);
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
+    return () =>
+      window.speechSynthesis.removeEventListener('voiceschanged', load);
   }, []);
 
-  const setCosyVoiceUrl = useCallback((url: string) => {
-    const trimmed = url.trim().replace(/\/+$/, '') || DEFAULT_COSYVOICE_URL;
-    setCosyVoiceUrlState(trimmed);
-    localStorage.setItem(COSYVOICE_URL_KEY, trimmed);
+  const setQwenUrl = useCallback((url: string) => {
+    const trimmed = url.trim().replace(/\/+$/, '') || DEFAULT_QWEN_URL;
+    setQwenUrlState(trimmed);
+    localStorage.setItem(QWEN_URL_KEY, trimmed);
   }, []);
 
-  const voice = voices.find(v => v.voiceURI === voiceURI)
-    ?? voices.find(v => /^zh[-_]CN$/i.test(v.lang))
-    ?? voices[0]
-    ?? null;
+  const voice =
+    voices.find((v) => v.voiceURI === voiceURI) ??
+    voices.find((v) => /^zh[-_]CN$/i.test(v.lang)) ??
+    voices[0] ??
+    null;
 
   /* ════════════════════════════════════════════════════
      System engine – SentenceSpeaker
@@ -87,7 +106,7 @@ export function useSpeech(text: string, identity: string) {
     const speaker = new SentenceSpeaker(
       window.speechSynthesis,
       () => new SpeechSynthesisUtterance(),
-      next => {
+      (next) => {
         setSystemState({ ...next });
         if (['speaking', 'paused'].includes(next.status))
           localStorage.setItem(`tf-bookmark:${identity}`, String(next.index));
@@ -97,11 +116,14 @@ export function useSpeech(text: string, identity: string) {
     );
     systemRef.current = speaker;
     setSystemState({ ...speaker.state });
-    return () => { speaker.destroy(); systemRef.current = null; };
+    return () => {
+      speaker.destroy();
+      systemRef.current = null;
+    };
   }, [sentences, voice, identity]);
 
   /* ════════════════════════════════════════════════════
-     Audio cleanup helpers (shared by edge + cosyvoice)
+     Audio cleanup helpers (shared by Edge + Qwen)
      ════════════════════════════════════════════════════ */
   const clearAudio = useCallback(() => {
     const audio = audioRef.current;
@@ -118,14 +140,17 @@ export function useSpeech(text: string, identity: string) {
     audioUrlRef.current = '';
   }, []);
 
-  const stopAudio = useCallback((reset = true) => {
-    audioEpochRef.current += 1;
-    clearAudio();
-    if (reset) {
-      setAudioState(emptyState());
-      prefetchRef.current.clear();
-    }
-  }, [clearAudio]);
+  const stopAudio = useCallback(
+    (reset = true) => {
+      audioEpochRef.current += 1;
+      clearAudio();
+      if (reset) {
+        setAudioState(emptyState());
+        prefetchRef.current.clear();
+      }
+    },
+    [clearAudio],
+  );
 
   // Reset on identity / text change
   useEffect(() => {
@@ -134,189 +159,224 @@ export function useSpeech(text: string, identity: string) {
   }, [identity, text, stopAudio]);
 
   /* ════════════════════════════════════════════════════
-     Audio blob generation — Edge TTS vs CosyVoice 2
+     Audio blob generation — Edge TTS vs local Qwen3-TTS
      ════════════════════════════════════════════════════ */
-  const generateEdgeBlob = useCallback(async (sentence: string): Promise<Blob> => {
-    const resp = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: sentence }),
-    });
-    if (!resp.ok) throw new Error('Edge TTS 请求失败');
-    return resp.blob();
-  }, []);
+  const generateEdgeBlob = useCallback(
+    async (sentence: string): Promise<Blob> => {
+      const resp = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: sentence }),
+      });
+      if (!resp.ok) throw new Error('Edge TTS 请求失败');
+      return resp.blob();
+    },
+    [],
+  );
 
-  const generateCosyVoiceBlob = useCallback(async (sentence: string): Promise<Blob> => {
-    const base = cosyVoiceUrl || DEFAULT_COSYVOICE_URL;
-    // Standard CosyVoice local endpoint format (supports /tts or /inference_cross_lingual or /api/tts)
-    const endpoints = [
-      `${base}/tts`,
-      `${base}/inference_zero_shot`,
-      `${base}/inference_cross_lingual`,
-      `${base}/api/tts`,
-    ];
-
-    let lastError: Error | null = null;
-    for (const url of endpoints) {
-      try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: sentence,
-            tts_text: sentence,
-            voice: '中文女',
-            speaker: '中文女',
-            speed: 1.0,
-          }),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (resp.ok) return await resp.blob();
-      } catch (err) {
-        lastError = err as Error;
-      }
-    }
-    throw new Error(lastError?.message || '无法连接本地 CosyVoice 服务，请检查服务是否在 ' + base + ' 启动');
-  }, [cosyVoiceUrl]);
+  const generateQwenBlob = useCallback(
+    async (sentence: string): Promise<Blob> => {
+      const base = qwenUrl || DEFAULT_QWEN_URL;
+      const resp = await fetch(`${base}/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: sentence, speaker: 'Serena' }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!resp.ok)
+        throw new Error('本地 Qwen3-TTS 服务未就绪，请确认已启动服务。');
+      return resp.blob();
+    },
+    [qwenUrl],
+  );
 
   /* ════════════════════════════════════════════════════
-     Check CosyVoice connection
+     Check Qwen3-TTS connection
      ════════════════════════════════════════════════════ */
-  const checkCosyVoice = useCallback(async (): Promise<boolean> => {
-    setModelState(s => ({ ...s, status: 'preparing', progress: 0, error: '' }));
+  const checkQwen = useCallback(async (): Promise<boolean> => {
+    setModelState((s) => ({
+      ...s,
+      status: 'preparing',
+      progress: 0,
+      error: '',
+    }));
     try {
-      const blob = await generateCosyVoiceBlob('测试。');
+      const blob = await generateQwenBlob('测试。');
       if (blob && blob.size > 0) {
-        setModelState({ status: 'ready', progress: 100, error: '', cached: true });
+        setModelState({
+          status: 'ready',
+          progress: 100,
+          error: '',
+          cached: true,
+        });
         return true;
       }
       throw new Error('未返回有效音频');
     } catch (e) {
-      const msg = (e as Error).message || '本地 CosyVoice 2 服务未就绪，请确保本地已启动服务。';
-      setModelState({ status: 'error', progress: 0, error: msg, cached: false });
+      const msg =
+        (e as Error).message ||
+        '本地 Qwen3-TTS 服务未就绪，请确保已启动本机服务。';
+      setModelState({
+        status: 'error',
+        progress: 0,
+        error: msg,
+        cached: false,
+      });
       return false;
     }
-  }, [generateCosyVoiceBlob]);
+  }, [generateQwenBlob]);
 
   /* ════════════════════════════════════════════════════
      Prefetch pipeline
      ════════════════════════════════════════════════════ */
-  const prefetchSentence = useCallback((index: number, epoch: number, useEdge: boolean) => {
-    if (index >= sentences.length || prefetchRef.current.has(index)) return;
-    const gen = useEdge ? generateEdgeBlob(sentences[index]) : generateCosyVoiceBlob(sentences[index]);
-    gen.then(blob => {
-      if (epoch === audioEpochRef.current) prefetchRef.current.set(index, blob);
-    }).catch(() => { /* prefetch failure is non-critical */ });
-  }, [sentences, generateEdgeBlob, generateCosyVoiceBlob]);
+  const prefetchSentence = useCallback(
+    (index: number, epoch: number, useEdge: boolean) => {
+      if (index >= sentences.length || prefetchRef.current.has(index)) return;
+      const gen = useEdge
+        ? generateEdgeBlob(sentences[index])
+        : generateQwenBlob(sentences[index]);
+      gen
+        .then((blob) => {
+          if (epoch === audioEpochRef.current)
+            prefetchRef.current.set(index, blob);
+        })
+        .catch(() => {
+          /* prefetch failure is non-critical */
+        });
+    },
+    [sentences, generateEdgeBlob, generateQwenBlob],
+  );
 
   /* ════════════════════════════════════════════════════
      Core playback — sentence by sentence with prefetch
      ════════════════════════════════════════════════════ */
-  const playAudio = useCallback(async (requestedIndex: number) => {
-    if (!sentences.length) return;
-    const index = Math.max(0, Math.min(requestedIndex, sentences.length - 1));
-    const epoch = ++audioEpochRef.current;
-    clearAudio();
+  const playAudio = useCallback(
+    async (requestedIndex: number) => {
+      if (!sentences.length) return;
+      const index = Math.max(0, Math.min(requestedIndex, sentences.length - 1));
+      const epoch = ++audioEpochRef.current;
+      clearAudio();
 
-    const isOnline = navigator.onLine;
-    // Rule: If online, prefer Edge Natural TTS. If offline (or explicitly selected cosyvoice when offline), use local CosyVoice.
-    const useEdge = engine === 'edge' ? isOnline : (engine === 'cosyvoice' && isOnline ? true : false);
+      const useEdge = engine === 'edge';
 
-    localStorage.setItem(`tf-bookmark:${identity}`, String(index));
+      localStorage.setItem(`tf-bookmark:${identity}`, String(index));
 
-    // 1. Try prefetch buffer
-    let blob = prefetchRef.current.get(index);
-    if (blob) {
-      prefetchRef.current.delete(index);
-    } else {
-      // 2. Generate on demand
-      setAudioState({
-        status: 'generating',
-        index,
-        error: '',
-      });
+      // 1. Try prefetch buffer
+      let blob = prefetchRef.current.get(index);
+      if (blob) {
+        prefetchRef.current.delete(index);
+      } else {
+        // 2. Generate on demand
+        setAudioState({
+          status: 'generating',
+          index,
+          error: '',
+        });
 
-      try {
-        blob = useEdge
-          ? await generateEdgeBlob(sentences[index])
-          : await generateCosyVoiceBlob(sentences[index]);
-      } catch {
-        // Fallback: If edge failed (or offline), try CosyVoice
-        if (useEdge) {
-          try {
-            setAudioState({ status: 'generating', index, error: '' });
-            blob = await generateCosyVoiceBlob(sentences[index]);
-          } catch {
+        try {
+          blob = useEdge
+            ? await generateEdgeBlob(sentences[index])
+            : await generateQwenBlob(sentences[index]);
+        } catch {
+          // Fallback: if Edge is unavailable, try the local Qwen service.
+          if (useEdge) {
+            try {
+              setAudioState({ status: 'generating', index, error: '' });
+              blob = await generateQwenBlob(sentences[index]);
+            } catch {
+              if (epoch === audioEpochRef.current) {
+                setAudioState({
+                  status: 'error',
+                  index,
+                  error:
+                    '在线语音服务不可用，且本地 Qwen3-TTS 未连接。请检查网络或启动 Qwen3-TTS 本机服务。',
+                });
+              }
+              return;
+            }
+          } else {
             if (epoch === audioEpochRef.current) {
               setAudioState({
                 status: 'error',
                 index,
-                error: '在线语音服务不可用，且本地 CosyVoice 2 未连接。请检查网络或确认本地 CosyVoice 已启动。',
+                error:
+                  '本地 Qwen3-TTS 生成失败。请确认本机服务已在 ' +
+                  (qwenUrl || DEFAULT_QWEN_URL) +
+                  ' 启动。',
               });
             }
             return;
           }
-        } else {
-          if (epoch === audioEpochRef.current) {
-            setAudioState({
-              status: 'error',
-              index,
-              error: '本地 CosyVoice 2 生成失败。请确认本地服务已在 ' + (cosyVoiceUrl || DEFAULT_COSYVOICE_URL) + ' 启动。',
-            });
-          }
-          return;
         }
       }
-    }
 
-    if (epoch !== audioEpochRef.current) return;
-
-    // 3. Play the generated audio
-    const url = URL.createObjectURL(blob);
-    const audio = document.createElement('audio');
-    audio.preload = 'auto';
-    audio.autoplay = false;
-    audio.muted = false;
-    audio.volume = 1;
-    audio.setAttribute('playsinline', '');
-    audio.style.display = 'none';
-    document.body.appendChild(audio);
-    audio.src = url;
-    audioRef.current = audio;
-    audioUrlRef.current = url;
-
-    audio.onended = () => {
       if (epoch !== audioEpochRef.current) return;
-      if (index >= sentences.length - 1) {
-        clearAudio();
-        setAudioState({ status: 'ended', index, error: '' });
-      } else {
-        void playAudio(index + 1);
-      }
-    };
-    audio.onerror = () => {
-      if (epoch === audioEpochRef.current) {
-        setAudioState({ status: 'error', index, error: '语音播放失败，可以从当前句重新开始。' });
-      }
-    };
 
-    // 4. Prefetch next sentence while this one plays
-    const nextUseEdge = engine === 'edge' ? navigator.onLine : false;
-    if (index + 1 < sentences.length) {
-      prefetchSentence(index + 1, epoch, nextUseEdge);
-    }
+      // 3. Play the generated audio
+      const url = URL.createObjectURL(blob);
+      const audio = document.createElement('audio');
+      audio.preload = 'auto';
+      audio.autoplay = false;
+      audio.muted = false;
+      audio.volume = 1;
+      audio.setAttribute('playsinline', '');
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
+      audio.src = url;
+      audioRef.current = audio;
+      audioUrlRef.current = url;
 
-    try {
-      await audio.play();
-      if (epoch === audioEpochRef.current) {
-        setAudioState({ status: 'speaking', index, error: '' });
+      audio.onended = () => {
+        if (epoch !== audioEpochRef.current) return;
+        if (index >= sentences.length - 1) {
+          clearAudio();
+          setAudioState({ status: 'ended', index, error: '' });
+        } else {
+          void playAudio(index + 1);
+        }
+      };
+      audio.onerror = () => {
+        if (epoch === audioEpochRef.current) {
+          setAudioState({
+            status: 'error',
+            index,
+            error: '语音播放失败，可以从当前句重新开始。',
+          });
+        }
+      };
+
+      // 4. Prefetch next sentence while this one plays
+      const nextUseEdge = engine === 'edge' ? navigator.onLine : false;
+      if (index + 1 < sentences.length) {
+        prefetchSentence(index + 1, epoch, nextUseEdge);
       }
-    } catch {
-      if (epoch === audioEpochRef.current) {
-        setAudioState({ status: 'paused', index, error: '声音已准备好，请再次点击播放。' });
+
+      try {
+        await audio.play();
+        if (epoch === audioEpochRef.current) {
+          setAudioState({ status: 'speaking', index, error: '' });
+        }
+      } catch {
+        if (epoch === audioEpochRef.current) {
+          setAudioState({
+            status: 'paused',
+            index,
+            error: '声音已准备好，请再次点击播放。',
+          });
+        }
       }
-    }
-  }, [clearAudio, cosyVoiceUrl, engine, generateCosyVoiceBlob, generateEdgeBlob, identity, prefetchSentence, sentences]);
+    },
+    [
+      clearAudio,
+      qwenUrl,
+      engine,
+      generateQwenBlob,
+      generateEdgeBlob,
+      identity,
+      prefetchSentence,
+      sentences,
+    ],
+  );
 
   /* ════════════════════════════════════════════════════
      Pause / Resume / Move (audio engines)
@@ -325,36 +385,50 @@ export function useSpeech(text: string, identity: string) {
     const audio = audioRef.current;
     if (audioState.status === 'speaking' && audio) {
       audio.pause();
-      setAudioState(s => ({ ...s, status: 'paused', error: '' }));
+      setAudioState((s) => ({ ...s, status: 'paused', error: '' }));
     }
   }, [audioState.status]);
 
   const resumeAudio = useCallback(() => {
     const audio = audioRef.current;
     if (audioState.status === 'paused' && audio) {
-      void audio.play()
-        .then(() => setAudioState(s => ({ ...s, status: 'speaking', error: '' })))
-        .catch(() => setAudioState(s => ({ ...s, error: '浏览器阻止了播放，请再次点击。' })));
+      void audio
+        .play()
+        .then(() =>
+          setAudioState((s) => ({ ...s, status: 'speaking', error: '' })),
+        )
+        .catch(() =>
+          setAudioState((s) => ({
+            ...s,
+            error: '浏览器阻止了播放，请再次点击。',
+          })),
+        );
       return;
     }
     void playAudio(audioState.status === 'ended' ? 0 : audioState.index);
   }, [audioState.index, audioState.status, playAudio]);
 
-  const moveAudio = useCallback((delta: -1 | 1) => {
-    const index = audioState.index + delta;
-    if (index < 0 || index >= sentences.length) return;
-    void playAudio(index);
-  }, [audioState.index, playAudio, sentences.length]);
+  const moveAudio = useCallback(
+    (delta: -1 | 1) => {
+      const index = audioState.index + delta;
+      if (index < 0 || index >= sentences.length) return;
+      void playAudio(index);
+    },
+    [audioState.index, playAudio, sentences.length],
+  );
 
   /* ════════════════════════════════════════════════════
      Engine switching
      ════════════════════════════════════════════════════ */
-  const setEngine = useCallback((next: SpeechEngine) => {
-    systemRef.current?.stop();
-    stopAudio();
-    localStorage.setItem(ENGINE_KEY, next);
-    setEngineState(next);
-  }, [stopAudio]);
+  const setEngine = useCallback(
+    (next: SpeechEngine) => {
+      systemRef.current?.stop();
+      stopAudio();
+      localStorage.setItem(ENGINE_KEY, next);
+      setEngineState(next);
+    },
+    [stopAudio],
+  );
 
   /* ════════════════════════════════════════════════════
      Unified output — same API for all consumers
@@ -372,21 +446,28 @@ export function useSpeech(text: string, identity: string) {
     supported,
     naturalSupported: true,
     modelState,
-    cosyVoiceUrl,
-    setCosyVoiceUrl,
-    checkCosyVoice,
+    qwenUrl,
+    setQwenUrl,
+    checkQwen,
     state,
     sentences,
     canPlay,
     isBusy,
-    start: () => engine === 'system' ? systemRef.current?.start() : void playAudio(0),
-    resume: () => engine === 'system' ? systemRef.current?.resume() : resumeAudio(),
-    pause: () => engine === 'system' ? systemRef.current?.pause() : pauseAudio(),
-    stop: () => engine === 'system' ? systemRef.current?.stop() : stopAudio(),
-    move: (delta: -1 | 1) => engine === 'system' ? systemRef.current?.move(delta) : moveAudio(delta),
+    start: () =>
+      engine === 'system' ? systemRef.current?.start() : void playAudio(0),
+    resume: () =>
+      engine === 'system' ? systemRef.current?.resume() : resumeAudio(),
+    pause: () =>
+      engine === 'system' ? systemRef.current?.pause() : pauseAudio(),
+    stop: () => (engine === 'system' ? systemRef.current?.stop() : stopAudio()),
+    move: (delta: -1 | 1) =>
+      engine === 'system' ? systemRef.current?.move(delta) : moveAudio(delta),
     continueLast: () => {
-      const index = Number(localStorage.getItem(`tf-bookmark:${identity}`)) || 0;
-      return engine === 'system' ? systemRef.current?.start(index) : void playAudio(index);
+      const index =
+        Number(localStorage.getItem(`tf-bookmark:${identity}`)) || 0;
+      return engine === 'system'
+        ? systemRef.current?.start(index)
+        : void playAudio(index);
     },
   };
 }

@@ -54,4 +54,8 @@ Google ID token 经 Google JWKS 验证签名、issuer、audience、到期、nonc
 
 ## 发布版本规则
 
-每次对线上站点做任何更新时，必须在发布前用部署当时的日本时间（Asia/Tokyo）更新 `VERSION`、`package.json` 的 `releaseVersion` 与 `lib/release.ts`，格式严格为 `vYYYYMMDDHHMM`，例如 `v202609051624`。页面顶部从 `lib/release.ts` 读取版本号；同时更新 `public/sw.js` 的缓存版本，避免用户看到旧页面。随后执行生产构建、创建新的 Sites 版本并部署；部署成功后才算本次更新完成。当前发布版本：`v202609051925`。
+每次对线上站点做任何更新时，必须在发布前用部署当时的日本时间（Asia/Tokyo）更新 `VERSION`、`package.json` 的 `releaseVersion` 与 `lib/release.ts`，格式严格为 `vYYYYMMDDHHMM`，例如 `v202609051624`。页面顶部从 `lib/release.ts` 读取版本号；同时更新 `public/sw.js` 的缓存版本，避免用户看到旧页面。随后执行生产构建、创建新的 Sites 版本并部署；部署成功后才算本次更新完成。当前发布版本：`v202609052004`。
+
+## 本地 Qwen3-TTS
+
+中文离线高保真朗读只使用 `Qwen3-TTS-12Hz-1.7B-CustomVoice`，不再包含 CosyVoice。首次使用时，在 Windows 电脑安装 Python 3.12 后执行：`py -3.12 -m pip install -r local-tts/requirements.txt`，再执行 `py -3.12 local-tts/qwen3_tts_server.py`。首次启动会下载模型；服务启动后，在网站的“语音与设置”选择“本地 Qwen3-TTS 高保真（离线）”，并测试本机服务连接。
