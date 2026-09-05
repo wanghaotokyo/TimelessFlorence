@@ -5,7 +5,7 @@ const CHROMIUM_FULL_VERSION = '143.0.3650.75';
 const CHROMIUM_MAJOR = CHROMIUM_FULL_VERSION.split('.')[0];
 const SEC_MS_GEC_VERSION = `1-${CHROMIUM_FULL_VERSION}`;
 const AUDIO_FORMAT = 'audio-24khz-48kbitrate-mono-mp3';
-const DEFAULT_VOICE = 'zh-CN-XiaoxiaoNeural';
+const DEFAULT_VOICE = 'zh-CN-XiaomoNeural';
 
 const USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROMIUM_MAJOR}.0.0.0 Safari/537.36 Edg/${CHROMIUM_MAJOR}.0.0.0`;
 
@@ -52,7 +52,6 @@ export async function synthesize(text: string, voice = DEFAULT_VOICE): Promise<A
       'Accept-Encoding': 'gzip, deflate, br, zstd',
       Pragma: 'no-cache',
       'Cache-Control': 'no-cache',
-      Upgrade: 'websocket',
       Cookie: `MUID=${muid}`,
     },
   }) as Response & { webSocket?: WebSocket };
@@ -68,7 +67,7 @@ export async function synthesize(text: string, voice = DEFAULT_VOICE): Promise<A
   ws.send(config);
 
   const requestId = crypto.randomUUID().replace(/-/g, '');
-  const ssml = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='${escapeXml(voice)}'>${escapeXml(cleanXml(text))}</voice></speak>`;
+  const ssml = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='zh-CN'><voice name='${escapeXml(voice)}'><mstts:express-as style='calm' styledegree='1.15'><prosody rate='-14%' pitch='-1st'>${escapeXml(cleanXml(text))}</prosody></mstts:express-as></voice></speak>`;
   ws.send(ssml);
 
   return new Promise<ArrayBuffer>((resolve, reject) => {

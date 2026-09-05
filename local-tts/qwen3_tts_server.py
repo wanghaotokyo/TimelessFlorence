@@ -17,6 +17,11 @@ from qwen_tts import Qwen3TTSModel
 import uvicorn
 
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+CURATOR_INSTRUCTION = (
+    "优雅、知性、沉静的成年女性美术馆讲解员声音。语速舒缓，吐字清晰，"
+    "语气温和而有分寸。带领听众观察作品时自然停顿，重要细节略微强调，"
+    "并留出欣赏和思考的时间。情感含蓄但不冷淡，避免播音腔、推销感和夸张表演。"
+)
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 ORIGINS = os.getenv(
@@ -53,6 +58,7 @@ def tts(request: TTSRequest):
             text=request.text,
             language="Chinese",
             speaker=request.speaker,
+            instruct=CURATOR_INSTRUCTION,
         )
         audio = io.BytesIO()
         sf.write(audio, np.asarray(wavs[0]), sample_rate, format="WAV")
