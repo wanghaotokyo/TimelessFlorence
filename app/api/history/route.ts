@@ -1,0 +1,2 @@
+import { db, handler, json, requireUser } from '@/lib/server';
+export async function GET(req: Request) { return handler(async () => { const u=await requireUser(req); const rows=await db().prepare('SELECT id,title,data,created,version,deleted FROM guides WHERE user_id=? ORDER BY created DESC LIMIT 500').bind(u.id).all<{id:string;title:string;data:string;created:string;version:number;deleted:number}>(); return json(rows.results.map(r=>r.deleted?{id:r.id,deleted:true,version:r.version}:{...JSON.parse(r.data),title:r.title,version:r.version})); }); }

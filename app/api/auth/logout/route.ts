@@ -1,0 +1,2 @@
+import { cookie, db, digest, handler, json, sameOrigin, sessionCookie } from '@/lib/server';
+export async function POST(req: Request) { return handler(async () => { sameOrigin(req); const token = cookie(req,'tf_session'); if(token) await db().prepare('DELETE FROM sessions WHERE hash=?').bind(await digest(token)).run(); const res=json({ok:true}); res.headers.set('Set-Cookie',sessionCookie(req,'',0)); return res; }); }
