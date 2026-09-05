@@ -37,9 +37,26 @@ function makeMuid(): string {
 }
 
 function edgeTimestamp(): string {
-  return new Date()
-    .toUTCString()
-    .replace('GMT', 'GMT+0000 (Coordinated Universal Time)');
+  const now = new Date();
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const time = [now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()]
+    .map((value) => String(value).padStart(2, '0'))
+    .join(':');
+  return `${weekdays[now.getUTCDay()]} ${months[now.getUTCMonth()]} ${String(now.getUTCDate()).padStart(2, '0')} ${now.getUTCFullYear()} ${time} GMT+0000 (Coordinated Universal Time)`;
 }
 
 async function openSpeechSocket(
@@ -136,11 +153,8 @@ export async function synthesize(
       },
     },
   )}\r\n`;
-  ws.send(config);
-
   const requestId = crypto.randomUUID().replace(/-/g, '');
   const ssml = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='zh-CN'><voice name='${escapeXml(voice)}'><mstts:express-as style='calm' styledegree='1.15'><prosody rate='-14%' pitch='-1st'>${escapeXml(cleanXml(text))}</prosody></mstts:express-as></voice></speak>`;
-  ws.send(ssml);
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     let done = false;
@@ -193,11 +207,20 @@ export async function synthesize(
       reject(new HttpError(502, '语音服务连接中断。'));
     });
 
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', (event: CloseEvent) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      reject(new HttpError(502, '语音服务连接意外关闭。'));
+      reject(
+        new HttpError(
+          502,
+          `语音服务连接意外关闭（${event.code}${event.reason ? `：${event.reason}` : ''}）。`,
+        ),
+      );
     });
+
+    // Install listeners before sending because short utterances can complete quickly.
+    ws.send(config);
+    ws.send(ssml);
   });
 }
