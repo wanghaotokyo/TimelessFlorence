@@ -1,11 +1,11 @@
 import { HttpError } from './server';
+import { edgeVoiceCandidates } from './tts-voices';
 
 const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const CHROMIUM_FULL_VERSION = '143.0.3650.75';
 const CHROMIUM_MAJOR = CHROMIUM_FULL_VERSION.split('.')[0];
 const SEC_MS_GEC_VERSION = `1-${CHROMIUM_FULL_VERSION}`;
 const AUDIO_FORMAT = 'audio-24khz-48kbitrate-mono-mp3';
-const DEFAULT_VOICE = 'zh-CN-XiaomoNeural';
 const EDGE_EXTENSION_ORIGIN =
   'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold';
 
@@ -125,9 +125,9 @@ async function makeSecMsGec(): Promise<string> {
     .toUpperCase();
 }
 
-export async function synthesize(
+async function synthesizeWithVoice(
   text: string,
-  voice = DEFAULT_VOICE,
+  voice: string,
 ): Promise<ArrayBuffer> {
   const connectionId = crypto.randomUUID().replace(/-/g, '');
   const gec = await makeSecMsGec();
@@ -223,4 +223,20 @@ export async function synthesize(
     ws.send(config);
     ws.send(ssml);
   });
+}
+
+export async function synthesize(
+  text: string,
+  requestedVoice?: string,
+): Promise<ArrayBuffer> {
+  let lastError: unknown;
+  for (const voice of edgeVoiceCandidates(requestedVoice)) {
+    try {
+      return await synthesizeWithVoice(text, voice);
+    } catch (error) {
+      lastError = error;
+      console.warn('Edge TTS voice failed', voice, error);
+    }
+  }
+  throw lastError;
 }
