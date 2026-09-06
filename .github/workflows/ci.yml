@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Initialize local D1
+        run: npx wrangler d1 execute timeless-florence --local --command "SELECT 1"
+      - name: Start local Worker
+        run: |
+          npm run dev > "$RUNNER_TEMP/timeless-florence-dev.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/timeless-florence-dev.pid"
+      - name: Wait for local Worker
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:3000/api/config > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/timeless-florence-dev.log"
+          exit 1
+      - run: node --test tests/*.test.mjs
+

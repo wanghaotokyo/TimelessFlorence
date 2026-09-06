@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "timeless-florence",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "vinext/server/fetch-handler",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "timeless-florence",
+      "database_id": "5a7ae496-6005-4390-9367-5719dc1f0324",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "vars": {
+    "GOOGLE_CLIENT_ID": "",
+    "OPENAI_MODEL": "",
+    "DAILY_JOB_LIMIT": "10",
+    "GLOBAL_DAILY_JOB_LIMIT": "100"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

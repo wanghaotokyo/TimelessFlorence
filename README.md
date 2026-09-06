@@ -17,12 +17,12 @@
 
 复制 `.env.example` 到本机 `.env`（当前已有空配置）；密钥只在本机文件或部署服务的密钥设置中填写，不发到聊天、不提交 Git。
 
-- `GOOGLE_CLIENT_ID`：Google Cloud 的 Web OAuth 客户端 ID。将实际运行 origin 加入 Authorized JavaScript origins。电脑开发为 `http://localhost:3000`；当前私有预览为 `https://timeless-florence.haozi-w.chatgpt.site`。使用 Google Identity Services 的弹窗 credential 流，不需要应用持有 Google client secret。
+- `GOOGLE_CLIENT_ID`：Google Cloud 的 Web OAuth 客户端 ID。将实际运行 origin 加入 Authorized JavaScript origins。电脑开发为 `http://localhost:3000`；当前生产地址为 `https://timeless-florence.haozi-w.workers.dev`。使用 Google Identity Services 的弹窗 credential 流，不需要应用持有 Google client secret。
 - `OPENAI_API_KEY`：OpenAI 服务端密钥。Codex 中可以启用 OpenAI Developers 插件，在批准后创建或复用密钥并作为部署密钥设置；本会话没有该插件，未创建任何密钥。
 - `OPENAI_MODEL`：账号可用、支持 Responses 后台模式、web_search、结构化输出的模型 ID。没有暗中默认模型或未授权付费调用。
 - `DAILY_JOB_LIMIT` / `GLOBAL_DAILY_JOB_LIMIT`：每日任务数量上限，默认 10 / 100。一次完整流程包含一次识别任务和一次生成任务，每个任务包含检索与整理两次模型调用。数量上限不是精确金额上限，供应商后台仍应设置费用预算。
 
-部署环境通过 Sites 环境变量管理，不会自动读取本机 `.env`。私有预览外层访问控制不等于应用 Google 登录。面向公众开放需另行配置访问范围、Google 发布设置并完成真实账号测试。
+部署环境通过 `wrangler.jsonc` 和 Cloudflare Secrets 管理，不会把本机 `.env` 上传到生产环境。面向公众开放 Google 登录前，需配置 Google 发布设置并完成真实账号测试。
 
 ## 开发
 
@@ -34,7 +34,9 @@ npm run build
 node --test tests/*.test.mjs
 ```
 
-数据表定义在 `db/schema.ts`，迁移在 `drizzle/`，上线由 Sites 应用。不要在请求处理中创建表。已应用迁移不可改写。
+项目已使用工具无关的 Cloudflare Workers + D1 原生部署链路。日常部署步骤、AI 执行契约和安全边界见 [`CLOUDFLARE_DEPLOYMENT.md`](CLOUDFLARE_DEPLOYMENT.md)。
+
+数据表定义在 `db/schema.ts`，迁移在 `drizzle/`，上线由 Wrangler 在发布 Worker 前应用。不要在请求处理中创建表。已应用迁移不可改写。
 
 ## 数据与恢复
 
@@ -54,7 +56,7 @@ Google ID token 经 Google JWKS 验证签名、issuer、audience、到期、nonc
 
 ## 发布版本规则
 
-每次对线上站点做任何更新时，必须在发布前用部署当时的日本时间（Asia/Tokyo）更新 `VERSION`、`package.json` 的 `releaseVersion` 与 `lib/release.ts`，格式严格为 `vYYYYMMDDHHMM`，例如 `v202609051624`。页面顶部从 `lib/release.ts` 读取版本号；同时更新 `public/sw.js` 的缓存版本，避免用户看到旧页面。随后执行生产构建、创建新的 Sites 版本并部署；部署成功后才算本次更新完成。当前发布版本：`v202609052126`。
+每次对线上站点做任何更新时，必须在发布前用部署当时的日本时间（Asia/Tokyo）更新 `VERSION`、`package.json` 的 `releaseVersion` 与 `lib/release.ts`，格式严格为 `vYYYYMMDDHHMM`，例如 `v202609051624`。页面顶部从 `lib/release.ts` 读取版本号；同时更新 `public/sw.js` 的缓存版本，避免用户看到旧页面。随后执行生产构建、应用待执行的 D1 migration 并部署 Worker；部署成功后才算本次更新完成。当前发布版本：`v202609060929`。
 
 ## 本地 Qwen3-TTS
 

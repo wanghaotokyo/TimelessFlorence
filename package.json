@@ -1,15 +1,20 @@
 {
   "name": "sites-project",
   "version": "0.1.0",
-  "releaseVersion": "v202609052126",
+  "releaseVersion": "v202609060929",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "vinext dev",
+    "prebuild": "node scripts/clean-build.mjs",
     "build": "vinext build",
-    "start": "wrangler dev --config dist/server/wrangler.json",
+    "start": "vite preview",
+    "preview": "vite preview",
+    "db:migrate:production": "wrangler d1 migrations apply timeless-florence --remote",
+    "deploy:code": "wrangler deploy",
+    "deploy": "npm run build && npm run db:migrate:production && npm run deploy:code",
     "lint": "oxlint",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate"
@@ -17,7 +22,6 @@
   "dependencies": {
     "@base-ui/react": "1.7.0",
     "@shadcn/react": "0.3.0",
-    "@uzen/kokoro-js": "1.2.4",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
@@ -41,7 +45,6 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "4.20260515.1",
-    "@openai/sites-vite-plugin": "0.2.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",

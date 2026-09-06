@@ -36,6 +36,8 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/site-deploy.tar.gz
+/.npm-cache/
 
 !.env.example
 *.tsbuildinfo
