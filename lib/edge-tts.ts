@@ -159,7 +159,7 @@ async function synthesizeWithVoice(
     },
   )}\r\n`;
   const requestId = crypto.randomUUID().replace(/-/g, '');
-  const ssml = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='zh-CN'><voice name='${escapeXml(voice)}'><mstts:express-as style='${EDGE_TTS_STYLE}'><prosody rate='${EDGE_TTS_RATE}' pitch='${EDGE_TTS_PITCH}' volume='+0%'>${escapeXml(cleanXml(text))}</prosody></mstts:express-as></voice></speak>`;
+  const ssml = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='zh-CN'><voice name='${escapeXml(voice)}'><mstts:express-as style='${EDGE_TTS_STYLE}'><prosody rate='${EDGE_TTS_RATE}' pitch='${EDGE_TTS_PITCH}' volume='+0%'>${escapeXml(cleanXml(text))}</prosody></mstts:express-as></voice></speak>`;
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     let done = false;
