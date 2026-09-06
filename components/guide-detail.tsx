@@ -294,3 +294,5 @@ export function Player({ guide, speech }: { guide: Guide; speech: Speech }) {
     </div>
   );
 }
+
+export { InlineGuide as GuideDetail };
