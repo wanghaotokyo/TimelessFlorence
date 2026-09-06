@@ -20,22 +20,6 @@ Cloudflare Workers + Static Assets + D1
 
 迁移完成后，任何工具只需能够修改 Git、运行 npm 命令并查看 GitHub Actions 结果，不需要拥有自己的 Cloudflare 插件。
 
-## 版本号规则
-
-每次部署前必须更新版本号，两处同步修改：
-
-- `VERSION`
-- `lib/release.ts` 中的 `RELEASE_VERSION`
-
-格式为 **`v` + 东京时间（JST）精确到分钟的时间戳**，共 12 位数字，例如 `v202609061142`。
-
-PowerShell 读取当前东京时间：
-
-```powershell
-$jst = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([System.DateTime]::UtcNow, 'Tokyo Standard Time')
-$jst.ToString('yyyyMMddHHmm')
-```
-
 ## 当前日常部署命令
 
 在已通过 `wrangler login` 登录目标 Cloudflare 账号的机器上：

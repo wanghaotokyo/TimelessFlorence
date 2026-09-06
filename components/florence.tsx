@@ -1,16 +1,24 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Search,
+  Headphones,
   ArrowUpRight,
+  Landmark,
   History,
+  Download,
+  Settings,
+  Sparkles,
   Check,
   WifiOff,
-  DoorOpen,
+  Globe,
+  Clock,
   Pencil,
   Trash2,
   LoaderCircle,
   ExternalLink,
   RefreshCw,
+  LogOut,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -29,15 +37,15 @@ import {
   AlertDialogFooter,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
+import { SidebarProvider, Sidebar } from '@/components/ui/sidebar';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Picker } from './picker';
 import { ArtImage } from './art-image';
-import { InlineGuide, Player } from './guide-detail';
+import { GuideDetail, Player } from './guide-detail';
 import { demoGuide } from '@/lib/demo';
 import {
   type Guide,
   type Config,
-  type Prefs,
   type Language,
   type Duration,
   type Candidate,
@@ -55,6 +63,7 @@ import {
 } from '@/lib/local';
 import { useSpeech, type SpeechEngine } from '@/hooks/use-speech';
 import { RELEASE_VERSION } from '@/lib/release';
+type View = 'explore' | 'history' | 'offline';
 const languages = { zh: '中文', ja: '日本語', en: 'English' };
 const date = (s: string) =>
   new Intl.DateTimeFormat('zh-CN', {
@@ -78,13 +87,15 @@ async function api(url: string, init?: RequestInit) {
   return data;
 }
 function post(data: unknown): RequestInit {
-  return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) };
-}
-function patch(data: unknown): RequestInit {
-  return { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) };
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  };
 }
 export default function Florence() {
-  const [guide, setGuide] = useState<Guide | null>(null),
+  const [view, setView] = useState<View>('explore'),
+    [guide, setGuide] = useState<Guide | null>(null),
     [query, setQuery] = useState(''),
     [language, setLanguage] = useState<Language>('zh'),
     [duration, setDuration] = useState<Duration>(5);
@@ -92,7 +103,6 @@ export default function Florence() {
       googleClientId: '',
       generationReady: false,
       user: null,
-      prefs: {},
     }),
     [configLoaded, setConfigLoaded] = useState(false),
     [owner, setOwner] = useState('guest');
@@ -103,7 +113,6 @@ export default function Florence() {
     [busy, setBusy] = useState(''),
     [settings, setSettings] = useState(false),
     [login, setLogin] = useState(false),
-    [historyOpen, setHistoryOpen] = useState(false),
     [rename, setRename] = useState<LocalGuide | null>(null),
     [newTitle, setNewTitle] = useState(''),
     [deleting, setDeleting] = useState<LocalGuide | null>(null);
@@ -116,7 +125,7 @@ export default function Florence() {
       state: string;
     } | null>(null),
     [candidateMessage, setCandidateMessage] = useState(''),
-    [shellReady, setShellReady] = useState(false); // eslint-disable-line @typescript-eslint/no-unused-vars
+    [shellReady, setShellReady] = useState(false);
   const googleRef = useRef<HTMLDivElement>(null);
   const speech = useSpeech(
     guide?.language === 'zh' ? guide.speech : '',
@@ -180,11 +189,6 @@ export default function Florence() {
         setConfig(c);
         setOwner(c.user?.id ?? 'guest');
         if (c.user) localStorage.setItem('tf-owner', c.user.id);
-        // Apply saved prefs
-        if (c.prefs?.duration && [2, 5, 15].includes(c.prefs.duration))
-          setDuration(c.prefs.duration as Duration);
-        if (c.prefs?.engine && ['edge', 'system'].includes(c.prefs.engine))
-          speech.setEngine(c.prefs.engine as SpeechEngine);
         setConfigLoaded(true);
       })
       .catch(() => {
@@ -234,7 +238,9 @@ export default function Florence() {
           } else {
             setGuide(next.result as Guide);
             setCandidates([]);
+            setView('explore');
             await sync();
+            setNotice('讲解已生成并保存到履历。');
           }
           return;
         }
@@ -316,6 +322,13 @@ export default function Florence() {
       stopped = true;
     };
   }, [login, config.googleClientId]);
+  function navigate(v: View) {
+    speech.stop();
+    setGuide(null);
+    setView(v);
+    setNotice('');
+    void refresh();
+  }
   async function openDemo() {
     speech.stop();
     const old = rows.find((r) => r.guide.id === demoGuide.id);
@@ -324,6 +337,7 @@ export default function Florence() {
       createdAt: new Date().toISOString(),
     };
     setGuide(g);
+    setView('explore');
     await putLocal(
       old ?? {
         key: `${owner}:${g.id}`,
@@ -335,10 +349,6 @@ export default function Florence() {
     ).catch((e) => setNotice(e.message));
     await refresh();
   }
-  async function savePrefs(prefs: Prefs) {
-    if (!config.user || !online) return;
-    api('/api/config', patch(prefs)).catch(() => {});
-  }
   async function search() {
     setNotice('');
     if (!query.trim()) return setNotice('请先输入作品名称、作者或一些线索。');
@@ -349,13 +359,10 @@ export default function Florence() {
     }
     if (!config.generationReady)
       return setNotice('作品生成服务尚未配置，可先打开精选中文讲解体验。');
-    // Clear previous result before new search
-    speech.stop();
-    setGuide(null);
-    setCandidates([]);
-    setCandidateMessage('');
     const id = crypto.randomUUID();
     setBusy('search');
+    setCandidates([]);
+    setCandidateMessage('');
     try {
       const result = await api(
         '/api/jobs',
@@ -402,30 +409,20 @@ export default function Florence() {
       setNotice((e as Error).message);
     }
   }
-  const imageSaves = useRef(new Set<string>());
-  const [imageBusyId,setImageBusyId] = useState('');
-  async function saveOffline(g: Guide,repair=false) {
-    const saveKey=owner+':'+g.id;
-    if(imageSaves.current.has(saveKey))return;
-    imageSaves.current.add(saveKey);
-    setImageBusyId(g.id);
+  async function saveOffline(g: Guide) {
+    setBusy('download');
     try {
-      const saved = await downloadGuide(
+      await downloadGuide(
         owner,
         g,
         rows.find((r) => r.guide.id === g.id),
-        repair,
       );
-      if(ownerRef.current!==owner)return;
-      setGuide(current=>current?.id===g.id?{...current,image:saved.guide.image,imageCredit:saved.guide.imageCredit,imageSource:saved.guide.imageSource,imageDownloadable:saved.guide.imageDownloadable,artworkId:saved.guide.artworkId,imageFile:saved.guide.imageFile}:current);
-      if(saved.imageError)setNotice(saved.imageBlob ? '已保留原有离线图片。'+saved.imageError : '文字已保存，图片待重试。'+saved.imageError);
-      else if(repair)setNotice('图片已更新并保存到本机。');
       await refresh();
+      setNotice('文字与图片已保存。离线收听还需本机中文声音。');
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
-      imageSaves.current.delete(saveKey);
-      setImageBusyId(current=>current===g.id?'':current);
+      setBusy('');
     }
   }
   async function unDownload(r: LocalGuide) {
@@ -512,14 +509,10 @@ export default function Florence() {
   }
   const selectedRow = rows.find((r) => r.guide.id === guide?.id),
     visibleRows = rows
-      .filter((r) => r.pending !== 'delete')
+      .filter(
+        (r) => r.pending !== 'delete' && (view !== 'offline' || r.offline),
+      )
       .sort((a, b) => b.guide.createdAt.localeCompare(a.guide.createdAt));
-  // Auto-save every guide to offline storage when it first loads
-  useEffect(() => {
-    if (!guide || !online) return;
-    void saveOffline(guide);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guide?.id, online]);
   useEffect(() => {
     const context = (document as any).modelContext;
     if (!context?.registerTool) return;
@@ -546,6 +539,7 @@ export default function Florence() {
               throw new Error('请输入 1–1000 字线索。');
             window.speechSynthesis?.cancel();
             setGuide(null);
+            setView('explore');
             setQuery(q);
             await new Promise((resolve) => setTimeout(resolve, 0));
             return { query: q, submitted: false };
@@ -559,173 +553,381 @@ export default function Florence() {
   return (
     <main className="shell">
       <header className="topbar">
-        <div className="topbar-actions">
-          {!online && (
-            <span className="quiet topbar-status">
-              <WifiOff size={14} /> 离线
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+          <a className="brand" href="/" aria-label="Timeless Florence 首页">
+            <Landmark />
+            <span>
+              Timeless <i>Florence</i>
             </span>
-          )}
-          <button
-            className="user-avatar-btn"
-            onClick={() => (config.user ? setSettings(true) : setLogin(true))}
-            disabled={!configLoaded}
-            aria-label={config.user ? config.user.name : 'Google 登录'}
-            title={config.user ? config.user.name : 'Google 登录'}
-          >
-            {config.user ? (
-              <span className="user-avatar">
-                {config.user.name.charAt(0).toUpperCase()}
-              </span>
-            ) : (
-              <span className="user-avatar user-avatar--guest">
-                <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
-              </span>
-            )}
-          </button>
-        </div>
-        <a className="brand" href="/" aria-label="Timeless Florence 首页">
-          Timeless <i>Florence</i>
-          <span className="brand-version">{RELEASE_VERSION}</span>
-        </a>
-        <div style={{ display: 'flex', width: '120px', justifyContent: 'flex-end' }} />
-      </header>
-      <section className="main">
-        {notice && (
-          <div className="notice" role="status">
-            <span>{notice}</span>
-            <button aria-label="关闭提示" onClick={() => setNotice('')}>
-              <X size={16} />
-            </button>
-          </div>
-        )}
-        {job && (
-          <div className="job-panel" role="status">
-            <LoaderCircle className="spin" />
-            <div>
-              <strong>
-                {job.kind === 'resolve'
-                  ? '正在寻找你描述的作品'
-                  : '正在准备作品讲解'}
-              </strong>
-              <p>
-                {job.state === 'research'
-                  ? '查找资料与来源…'
-                  : job.state === 'formatting'
-                    ? '整理介绍文字…'
-                    : '正在处理…'}{' '}
-                可以稍后返回继续。
-              </p>
-            </div>
-            <Button variant="outline" onClick={cancel}>取消</Button>
-          </div>
-        )}
-
-        {/* ── Search panel ── */}
-        <form
-          className="search-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void search();
-          }}
-        >
-          <div className="search-input-box">
-            <input
-              id="art-query"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              maxLength={1000}
-              placeholder="作品名称、作者，或你记得的细节…"
-            />
-          </div>
-          <div className="search-actions">
-            <Button type="submit" disabled={!!job || !!busy}>
-              {busy === 'search' ? <LoaderCircle className="spin" /> : null}
-              探索作品
-            </Button>
-          </div>
-          <div className="search-secondary">
-            <button
-              type="button"
-              className="text-link"
-              onClick={() => { void refresh(); setHistoryOpen(true); }}
-              disabled={visibleRows.length === 0}
-            >
-              履历
-            </button>
-            <button
-              type="button"
-              className="text-link"
-              onClick={openDemo}
-            >
-              示例
-            </button>
-          </div>
-        </form>
-
-        {/* ── Candidate selection ── */}
-        {!!candidates.length && (
-          <div className="candidate-panel">
-            <h2 style={{ textAlign: 'center' }}>你指的是哪一件作品？</h2>
-            <p className="quiet" style={{ justifyContent: 'center' }}>
-              确认后生成 {languages[language]} · 约 {duration}{' '}
-              分钟的介绍。
-            </p>
-            <RadioGroup
-              value={selected}
-              onValueChange={(v) => setSelected(String(v))}
-              aria-label="确认作品"
-            >
-              {candidates.map((c, i) => (
-                <label key={i} className="candidate">
-                  <RadioGroupItem value={String(i)} />
-                  <div>
-                    <strong>{c.title}</strong>
-                    <p>
-                      {c.creator} · {c.year} · {c.type}
-                    </p>
-                    <p>{c.summary}</p>
-                    <a
-                      href={c.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      核对来源 <ExternalLink size={12} />
-                    </a>
-                  </div>
-                </label>
-              ))}
-            </RadioGroup>
-            <Button onClick={generate} disabled={!!busy || !!job} style={{ display: 'flex', margin: '20px auto 0' }}>
-              确认作品，生成介绍
-            </Button>
-          </div>
-        )}
-
-        {/* ── Inline guide result ── */}
-        {guide && (
-          <InlineGuide
-            guide={guide}
-            row={selectedRow}
-            onRetryImage={() => void saveOffline(guide,true)}
-            imageBusy={imageBusyId===guide.id}
-            speech={speech}
-            onClose={() => {
-              speech.stop();
-              setGuide(null);
+          </a>
+          <span
+            style={{
+              fontSize: '12px',
+              color: '#8c9c93',
+              fontFamily: 'monospace',
             }}
-            onSettings={() => setSettings(true)}
-          />
-        )}
-
-      </section>
+          >
+            {RELEASE_VERSION}
+          </span>
+        </div>
+        <span className="edition">ART, BEYOND TIME</span>
+        <Button
+          variant="outline"
+          onClick={() => (config.user ? setSettings(true) : setLogin(true))}
+          disabled={!configLoaded}
+        >
+          {config.user ? config.user.name : 'Google 账号登录'}
+        </Button>
+      </header>
+      <SidebarProvider
+        className="workspace"
+        style={{ '--sidebar-width': '216px' } as React.CSSProperties}
+      >
+        <Sidebar collapsible="none" className="rail">
+          <div className="eyebrow">你的艺术旅程</div>
+          {(
+            [
+              { id: 'explore', name: '探索作品', icon: Search },
+              { id: 'history', name: '讲解履历', icon: History },
+              { id: 'offline', name: '离线资料', icon: Download },
+            ] as const
+          ).map((n) => (
+            <button
+              key={n.id}
+              className={'nav ' + (view === n.id && !guide ? 'active' : '')}
+              onClick={() => navigate(n.id)}
+            >
+              <n.icon />
+              {n.name}
+            </button>
+          ))}
+          <button className="rail-bottom" onClick={() => setSettings(true)}>
+            <Settings size={18} />
+            语音与设置
+          </button>
+        </Sidebar>
+        <section className="main">
+          <div className="section-top">
+            <span className="eyebrow">
+              {guide
+                ? 'ARTWORK / 作品讲解'
+                : view === 'explore'
+                  ? 'EXPLORE / 探索作品'
+                  : view === 'history'
+                    ? 'COLLECTION / 讲解履历'
+                    : 'OFFLINE / 离线资料'}
+            </span>
+            <span className="quiet">
+              {!online ? (
+                <>
+                  <WifiOff size={14} /> 离线模式
+                </>
+              ) : (
+                '电脑体验版 · 中文语音'
+              )}
+            </span>
+          </div>
+          {notice && (
+            <div className="notice" role="status">
+              <span>{notice}</span>
+              <button aria-label="关闭提示" onClick={() => setNotice('')}>
+                <X size={16} />
+              </button>
+            </div>
+          )}
+          {job && (
+            <div className="job-panel" role="status">
+              <LoaderCircle className="spin" />
+              <div>
+                <strong>
+                  {job.kind === 'resolve'
+                    ? '正在寻找你描述的作品'
+                    : '正在准备作品讲解'}
+                </strong>
+                <p>
+                  {job.state === 'research'
+                    ? '查找资料与来源…'
+                    : job.state === 'formatting'
+                      ? '整理介绍文字…'
+                      : '正在处理…'}{' '}
+                  可以稍后返回继续。
+                </p>
+              </div>
+              <Button variant="outline" onClick={cancel}>
+                取消
+              </Button>
+            </div>
+          )}
+          {!guide && view === 'explore' && (
+            <>
+              <h1>此刻，走近一件作品。</h1>
+              <p className="intro">
+                一个名字，一点线索。发现眼前艺术背后的故事。
+              </p>
+              <form
+                className="search-panel"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void search();
+                }}
+              >
+                <label htmlFor="art-query">你正在看什么作品？</label>
+                <div className="query-row">
+                  <Search />
+                  <input
+                    id="art-query"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    maxLength={1000}
+                    placeholder="作品名称、作者，或你记得的细节…"
+                  />
+                  <Button type="submit" disabled={!!job || !!busy}>
+                    {busy === 'search' ? (
+                      <LoaderCircle className="spin" />
+                    ) : null}
+                    探索作品 <ArrowUpRight />
+                  </Button>
+                </div>
+                <div className="search-bottom">
+                  <span>支持中文 / 日本語 / English</span>
+                  <div className="choices">
+                    <Globe size={14} />
+                    <Picker
+                      label="介绍语言"
+                      value={language}
+                      onChange={(s) => setLanguage(s as Language)}
+                      items={Object.entries(languages).map(
+                        ([value, label]) => ({ value, label }),
+                      )}
+                    />
+                    <Clock size={14} />
+                    <Picker
+                      label="讲解时长"
+                      value={String(duration)}
+                      onChange={(s) => setDuration(Number(s) as Duration)}
+                      items={[2, 5, 15].map((n) => ({
+                        value: String(n),
+                        label: `约 ${n} 分钟`,
+                      }))}
+                    />
+                  </div>
+                </div>
+                {language !== 'zh' && (
+                  <p className="small-note">本版日文、英文仅提供文字介绍。</p>
+                )}
+              </form>
+              {candidateMessage && !candidates.length && (
+                <p className="notice">{candidateMessage}</p>
+              )}
+              {!!candidates.length && (
+                <div className="candidate-panel">
+                  <h2>你指的是哪一件作品？</h2>
+                  <p className="quiet">
+                    确认后生成 {languages[language]} · 约 {duration}{' '}
+                    分钟的介绍。
+                  </p>
+                  <RadioGroup
+                    value={selected}
+                    onValueChange={(v) => setSelected(String(v))}
+                    aria-label="确认作品"
+                  >
+                    {candidates.map((c, i) => (
+                      <label key={i} className="candidate">
+                        <RadioGroupItem value={String(i)} />
+                        <div>
+                          <strong>{c.title}</strong>
+                          <p>
+                            {c.creator} · {c.year} · {c.type}
+                          </p>
+                          <p>{c.summary}</p>
+                          <a
+                            href={c.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            核对来源 <ExternalLink size={12} />
+                          </a>
+                        </div>
+                      </label>
+                    ))}
+                  </RadioGroup>
+                  <Button onClick={generate} disabled={!!busy || !!job}>
+                    确认作品，生成介绍 <ArrowUpRight />
+                  </Button>
+                </div>
+              )}
+              <div className="section-top featured-label">
+                <span className="eyebrow">从这里开始</span>
+                <span className="quiet">精选体验 · 无需生成</span>
+              </div>
+              <article className="feature">
+                <div className="feature-art">
+                  <ArtImage guide={demoGuide} />
+                  <span className="image-tag">绘画 / PAINTING</span>
+                </div>
+                <div className="feature-copy">
+                  <div className="eyebrow gold">FLORENCE, ITALY · 约 1485</div>
+                  <h2>维纳斯的诞生</h2>
+                  <p className="original">The Birth of Venus</p>
+                  <p className="artist">
+                    桑德罗·波提切利
+                    <br />
+                    <span>乌菲齐美术馆 · 意大利</span>
+                  </p>
+                  <p className="description">
+                    从海风、玫瑰与流动的线条，走进文艺复兴对美的想象。
+                  </p>
+                  <Button className="listen" onClick={openDemo}>
+                    <Headphones />
+                    打开中文讲解 <ArrowUpRight />
+                  </Button>
+                  <p className="small-note">
+                    <Sparkles size={14} /> 编辑示例 · 约 2 分钟 · 本机履历
+                  </p>
+                </div>
+              </article>
+              <footer className="footnote">
+                每一次凝视，都可以更深一点。
+                <a
+                  href={demoGuide.imageSource!}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  图片：Wikimedia Commons · 公共领域
+                </a>
+              </footer>
+            </>
+          )}
+          {guide && (
+            <GuideDetail
+              guide={guide}
+              row={selectedRow}
+              speech={speech}
+              busy={busy === 'download'}
+              online={online}
+              onBack={() => {
+                speech.stop();
+                setGuide(null);
+              }}
+              onDownload={() => saveOffline(guide)}
+              onRemove={() => selectedRow && unDownload(selectedRow)}
+              onSettings={() => setSettings(true)}
+            />
+          )}
+          {!guide && view !== 'explore' && (
+            <>
+              <h1>
+                {view === 'history'
+                  ? '让喜欢的作品，留在身边。'
+                  : '把故事，带进美术馆。'}
+              </h1>
+              <div className="list-intro">
+                <p className="intro">
+                  {view === 'history'
+                    ? owner === 'guest'
+                      ? '精选示例保存在本机。登录后，新生成讲解会同步到账号。'
+                      : '账号履历与本机示例。重新打开即可继续阅读。'
+                    : '保存文字与图片；Edge 中文讲解音频会生成并保存在当前浏览器。'}
+                </p>
+                {view === 'history' && config.user && (
+                  <Button variant="outline" onClick={sync}>
+                    <RefreshCw />
+                    同步
+                  </Button>
+                )}
+              </div>
+              {!visibleRows.length ? (
+                <div className="empty-state">
+                  {view === 'offline' ? <Download /> : <History />}
+                  <h2>
+                    {view === 'offline'
+                      ? '还没有离线资料'
+                      : '艺术旅程，从一件作品开始'}
+                  </h2>
+                  <p>
+                    {view === 'offline'
+                      ? '打开一篇讲解，选择“保存离线”。'
+                      : '探索作品，或先打开精选中文讲解。'}
+                  </p>
+                  <Button variant="outline" onClick={() => navigate('explore')}>
+                    去探索 <ArrowUpRight />
+                  </Button>
+                </div>
+              ) : (
+                <div className="history-list">
+                  {visibleRows.map((r) => (
+                    <article className="history-row" key={r.key}>
+                      <button
+                        className="history-open"
+                        onClick={() => {
+                          speech.stop();
+                          setGuide(r.guide);
+                        }}
+                      >
+                        <ArtImage guide={r.guide} row={r} />
+                        <div>
+                          <h3>{r.guide.title}</h3>
+                          <p>
+                            {r.guide.creator} · {languages[r.guide.language]} ·
+                            约 {r.guide.duration} 分钟
+                          </p>
+                          <time>{date(r.guide.createdAt)}</time>
+                          <div className="badges">
+                            {r.guide.demo && <span>本机示例</span>}
+                            {r.offline && (
+                              <span>
+                                <Check size={12} /> 已保存 · {size(r.bytes)}
+                              </span>
+                            )}
+                            {r.pending && (
+                              <span>
+                                {r.conflict ? '标题同步冲突' : '等待同步'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                      <div className="row-actions">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`修改 ${r.guide.title} 的标题`}
+                          onClick={() => {
+                            setRename(r);
+                            setNewTitle(r.guide.title);
+                          }}
+                        >
+                          <Pencil />
+                        </Button>
+                        {view === 'offline' ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="移除离线下载"
+                            onClick={() => unDownload(r)}
+                          >
+                            <X />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`删除 ${r.guide.title}`}
+                            onClick={() => setDeleting(r)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </SidebarProvider>
       {guide?.language === 'zh' && <Player guide={guide} speech={speech} />}
-
-      {/* ── Login dialog ── */}
       <Dialog open={login} onOpenChange={setLogin}>
         <DialogContent className="modal">
           <DialogTitle>把艺术旅程保存到你的账号</DialogTitle>
@@ -752,163 +954,154 @@ export default function Florence() {
           </Button>
         </DialogContent>
       </Dialog>
-
-      {/* ── Settings dialog ── */}
       <Dialog open={settings} onOpenChange={setSettings}>
         <DialogContent className="modal">
-          <DialogTitle>设置</DialogTitle>
-          <div className="setting-row">
-            <span>讲解时长</span>
-            <Picker
-              label="讲解时长"
-              value={String(duration)}
-              onChange={(s) => { const d = Number(s) as Duration; setDuration(d); void savePrefs({ duration: d }); }}
-              items={[2, 5, 15].map((n) => ({
-                value: String(n),
-                label: `${n} 分钟讲解`,
-              }))}
-            />
-          </div>
-          <div className="setting-row">
-            <span>朗读引擎</span>
+          <DialogTitle>语音与设置</DialogTitle>
+          <DialogDescription>
+            Edge
+            在线自然声会在讲解文出现后自动生成，并保存到当前浏览器供重复播放；不使用收费语音服务。
+          </DialogDescription>
+          <div className="setting-block">
+            <h3>中文朗读引擎</h3>
             <Picker
               label="选择朗读引擎"
               value={speech.engine}
-              onChange={(value) => { speech.setEngine(value as SpeechEngine); void savePrefs({ engine: value }); }}
+              onChange={(value) => speech.setEngine(value as SpeechEngine)}
               items={[
-                { value: 'edge', label: 'Edge 在线自然声' },
-                { value: 'system', label: '本地声音（备用）' },
+                { value: 'edge', label: 'Edge 在线自然声（有网默认）' },
+                { value: 'qwen', label: '本地 Qwen3-TTS 高保真（离线）' },
+                { value: 'system', label: 'Windows 系统声音（备用）' },
               ]}
             />
-          </div>
-          {speech.engine === 'system' && (
-            <div className="setting-row">
-              <span>系统声音</span>
-              {speech.voices.length ? (
-                <Picker
-                  label="选择中文系统声音"
-                  value={speech.voice?.voiceURI ?? ''}
-                  onChange={speech.setVoiceURI}
-                  items={speech.voices.map((v) => ({
-                    value: v.voiceURI,
-                    label: v.name,
-                  }))}
-                />
-              ) : (
-                <span className="setting-note">未找到可用声音</span>
-              )}
-            </div>
-          )}
-          <div className="setting-row">
-            <span>离线资料</span>
-            <span className="setting-note">
-              {rows.filter((r) => r.offline).length} 篇 · {size(rows.reduce((n, r) => n + r.bytes, 0))}
-            </span>
-          </div>
-          {!config.user && (
-            <div className="setting-row">
-              <span>账号</span>
-              <Button variant="outline" size="sm" onClick={() => { setSettings(false); setLogin(true); }}>
-                Google 登录
-              </Button>
-            </div>
-          )}
-          {config.user && (
-            <div className="setting-footer">
-              <button className="logout-btn" onClick={logout} aria-label="退出登录" title="退出登录">
-                <DoorOpen size={18} />
-                退出
-              </button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* ── History dialog ── */}
-      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="modal modal-wide">
-          <DialogTitle>讲解履历</DialogTitle>
-          <DialogDescription>
-            {owner === 'guest'
-              ? '精选示例保存在本机。登录后，新生成讲解会同步到账号。'
-              : '账号履历与本机示例。点击即可继续阅读。'}
-          </DialogDescription>
-          {config.user && (
-            <Button variant="outline" size="sm" onClick={sync} style={{ alignSelf: 'flex-start' }}>
-              <RefreshCw size={14} />
-              同步
-            </Button>
-          )}
-          {!visibleRows.length ? (
-            <div className="empty-state">
-              <History />
-              <h2>艺术旅程，从一件作品开始</h2>
-              <p>探索作品，或先打开精选中文讲解。</p>
-            </div>
-          ) : (
-            <div className="history-list">
-              {visibleRows.map((r) => (
-                <article className="history-row" key={r.key}>
-                  <button
-                    className="history-open"
+            {speech.engine === 'edge' ? (
+              <div className="voice-setup">
+                <p>
+                  联网时优先使用微软 Edge 在线自然声。离线时请选择本地 Qwen3-TTS
+                  或 Windows 系统声音。
+                </p>
+                <p className="quiet">
+                  免费、自然、无需预下载模型。声音由微软 Edge 服务提供。
+                </p>
+              </div>
+            ) : speech.engine === 'qwen' ? (
+              <div className="voice-setup">
+                <p>
+                  Qwen3-TTS-12Hz-1.7B-CustomVoice
+                  中文高保真朗读。模型仅在当前电脑运行，离线时也可使用。
+                </p>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    marginTop: '8px',
+                  }}
+                >
+                  <label
+                    style={{ fontSize: '13px', color: 'var(--muted,#666)' }}
+                    htmlFor="qwen-tts-url"
+                  >
+                    本地服务地址
+                  </label>
+                  <input
+                    id="qwen-tts-url"
+                    className="text-input"
+                    style={{ padding: '6px 10px', fontSize: '13px' }}
+                    value={speech.qwenUrl}
+                    onChange={(e) => speech.setQwenUrl(e.target.value)}
+                    placeholder="http://127.0.0.1:9233"
+                  />
+                  <Button
+                    variant="outline"
+                    style={{ alignSelf: 'flex-start' }}
+                    disabled={speech.modelState.status === 'preparing'}
                     onClick={() => {
-                      speech.stop();
-                      setGuide(r.guide);
-                      setHistoryOpen(false);
+                      void speech.checkQwen().then((ok) => {
+                        if (ok) setNotice('已成功连接到本地 Qwen3-TTS 服务！');
+                      });
                     }}
                   >
-                    <ArtImage guide={r.guide} row={r} />
-                    <div>
-                      <h3>{r.guide.title}</h3>
-                      <p>
-                        {r.guide.creator} · {languages[r.guide.language]} ·
-                        约 {r.guide.duration} 分钟
-                      </p>
-                      <time>{date(r.guide.createdAt)}</time>
-                      <div className="badges">
-                        {r.guide.demo && <span>本机示例</span>}
-                        {r.offline && (
-                          <span>
-                            <Check size={12} /> {r.imageBlob?'文字与图片已保存':'文字已保存 · 图片待重试'} · {size(r.bytes)}
-                          </span>
-                        )}
-                        {r.pending && (
-                          <span>
-                            {r.conflict ? '标题同步冲突' : '等待同步'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                  <div className="row-actions">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`修改 ${r.guide.title} 的标题`}
-                      onClick={() => {
-                        setRename(r);
-                        setNewTitle(r.guide.title);
-                      }}
-                    >
-                      <Pencil />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`删除 ${r.guide.title}`}
-                      onClick={() => setDeleting(r)}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+                    {speech.modelState.status === 'preparing' ? (
+                      <>
+                        <LoaderCircle className="spin" />
+                        正在测试连接…
+                      </>
+                    ) : speech.modelState.status === 'ready' ? (
+                      <>
+                        <Check />
+                        服务连接正常
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw />
+                        测试本地服务连接
+                      </>
+                    )}
+                  </Button>
+                  {speech.modelState.error && (
+                    <p className="voice-error">{speech.modelState.error}</p>
+                  )}
+                </div>
+                <p className="quiet" style={{ marginTop: '8px' }}>
+                  提示：启动项目中提供的 Qwen3-TTS 本机服务（默认 9233
+                  端口），断网时将由此服务即时合成语音。
+                </p>
+              </div>
+            ) : (
+              <div className="voice-setup">
+                <p>
+                  系统声音启动快、占用空间小，音色取决于 Windows
+                  已安装的中文语音。
+                </p>
+                {speech.voices.length ? (
+                  <Picker
+                    label="选择中文系统声音"
+                    value={speech.voice?.voiceURI ?? ''}
+                    onChange={speech.setVoiceURI}
+                    items={speech.voices.map((v) => ({
+                      value: v.voiceURI,
+                      label: v.name,
+                    }))}
+                  />
+                ) : (
+                  <p>
+                    未找到可用声音。请前往 Windows 设置 → 时间和语言 →
+                    语音，安装中文声音后刷新应用。
+                  </p>
+                )}
+                <p className="quiet">
+                  不同电脑音色可能不同。离线出行前，请断网试读一次。
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="setting-block">
+            <h3>离线资料</h3>
+            <p>
+              {rows.filter((r) => r.offline).length} 篇 ·{' '}
+              {size(rows.reduce((n, r) => n + r.bytes, 0))}
+            </p>
+            <p className="quiet">
+              {shellReady ? '离线页面已准备。' : '离线页面准备中。'}
+            </p>
+          </div>
+          <div className="setting-block">
+            <h3>账号与生成</h3>
+            <p>{config.user ? config.user.email : '尚未登录 Google 账号'}</p>
+            <p className="quiet">
+              {config.generationReady
+                ? '作品生成服务已配置。'
+                : '作品生成服务尚未配置，目前可体验精选讲解。'}
+            </p>
+            {config.user && (
+              <Button variant="outline" onClick={logout}>
+                <LogOut />
+                退出并清理本机账号资料
+              </Button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
-
-      {/* ── Rename dialog ── */}
       <Dialog open={!!rename} onOpenChange={(open) => !open && setRename(null)}>
         <DialogContent className="modal">
           <DialogTitle>
@@ -916,7 +1109,7 @@ export default function Florence() {
           </DialogTitle>
           <DialogDescription>
             {rename?.conflict
-              ? `另一设备的标题是"${rename.conflict.title}"。你可以保存下方标题，或采用另一设备的标题。`
+              ? `另一设备的标题是“${rename.conflict.title}”。你可以保存下方标题，或采用另一设备的标题。`
               : '只修改履历名称，不改变作品与介绍内容。'}
           </DialogDescription>
           <label htmlFor="rename-title">标题</label>
@@ -953,8 +1146,6 @@ export default function Florence() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ── Delete confirmation ── */}
       <AlertDialog
         open={!!deleting}
         onOpenChange={(open) => !open && setDeleting(null)}
@@ -962,7 +1153,7 @@ export default function Florence() {
         <AlertDialogContent>
           <AlertDialogTitle>删除这篇讲解？</AlertDialogTitle>
           <AlertDialogDescription>
-            "{deleting?.guide.title}"将从履历和当前设备中移除。
+            “{deleting?.guide.title}”将从履历和当前设备中移除。
             {!online ? '联网后同步删除。' : ''}此操作无法撤销。
           </AlertDialogDescription>
           <AlertDialogFooter>
