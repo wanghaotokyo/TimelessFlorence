@@ -23,7 +23,7 @@ export type AudioPreparationState = {
 const QWEN_URL_KEY = 'tf-qwen-tts-url';
 const DEFAULT_QWEN_URL = 'http://127.0.0.1:9233';
 const ENGINE_KEY = 'tf-speech-engine';
-const EDGE_AUDIO_PROFILE = 'xiaoxiao-yunxi-rate-14-pitch-2hz-v3';
+const EDGE_AUDIO_PROFILE = 'female-calm-rate-5-pitch-2hz-v4';
 
 function emptyState(): SpeechState {
   return { status: 'idle', index: 0, error: '' };

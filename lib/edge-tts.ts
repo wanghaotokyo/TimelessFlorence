@@ -1,5 +1,10 @@
 import { HttpError } from './server';
-import { edgeVoiceCandidates } from './tts-voices';
+import {
+  EDGE_TTS_PITCH,
+  EDGE_TTS_RATE,
+  EDGE_TTS_STYLE,
+  edgeVoiceCandidates,
+} from './tts-voices';
 
 const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const CHROMIUM_FULL_VERSION = '143.0.3650.75';
@@ -154,7 +159,7 @@ async function synthesizeWithVoice(
     },
   )}\r\n`;
   const requestId = crypto.randomUUID().replace(/-/g, '');
-  const ssml = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='${escapeXml(voice)}'><prosody rate='-14%' pitch='-2Hz' volume='+0%'>${escapeXml(cleanXml(text))}</prosody></voice></speak>`;
+  const ssml = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='zh-CN'><voice name='${escapeXml(voice)}'><mstts:express-as style='${EDGE_TTS_STYLE}'><prosody rate='${EDGE_TTS_RATE}' pitch='${EDGE_TTS_PITCH}' volume='+0%'>${escapeXml(cleanXml(text))}</prosody></mstts:express-as></voice></speak>`;
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     let done = false;

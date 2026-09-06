@@ -1,4 +1,4 @@
-const VERSION='tf-shell-v202609061052';
+const VERSION='tf-shell-v202609061102';
 const SHELL=['/','/manifest.webmanifest','/icon.svg'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('tf-shell-')&&k!==VERSION).map(k=>caches.delete(k)))),self.clients.claim()]));});
