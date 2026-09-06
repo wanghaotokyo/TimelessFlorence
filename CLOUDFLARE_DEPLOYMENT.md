@@ -239,6 +239,8 @@ Cloudflare 生产 URL 确定后，把准确 origin 加入 Google OAuth Authorize
 
 ## AI 自动部署执行契约
 
+生产部署由 `.github/workflows/deploy-production.yml` 负责。推送到 GitHub 的 `main` 分支会自动部署，也可以在 GitHub Actions 页面手动运行。GitHub 仓库必须配置 `CLOUDFLARE_ACCOUNT_ID` 与 `CLOUDFLARE_API_TOKEN` 两个 Repository secret；任何 AI Coding 工具都不得把它们写入代码、日志或聊天。AI 在自动部署模式下只需完成下列检查、提交并推送 `main`，随后检查 GitHub Actions 与生产 URL；不应要求本机保存 Cloudflare Token。
+
 当用户明确要求“部署到 Cloudflare production”时，AI 应执行：
 
 1. 确认当前目录是项目根目录，并读取本文、`README.md`、`package.json`、`wrangler.jsonc` 和待执行 migration。

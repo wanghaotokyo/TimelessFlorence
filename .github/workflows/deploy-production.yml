@@ -1,6 +1,9 @@
 name: Deploy production
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -28,4 +31,3 @@ jobs:
       - run: npm run build
       - run: npm run db:migrate:production
       - run: npm run deploy:code
-
