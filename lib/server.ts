@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-export type Runtime = { DB: D1Database; GOOGLE_CLIENT_ID?: string; OPENAI_API_KEY?: string; OPENAI_MODEL?: string; DAILY_JOB_LIMIT?: string; GLOBAL_DAILY_JOB_LIMIT?: string };
+export type Runtime = { DB: D1Database; ART_IMAGES?: R2Bucket; GOOGLE_CLIENT_ID?: string; OPENAI_API_KEY?: string; OPENAI_MODEL?: string; DAILY_JOB_LIMIT?: string; GLOBAL_DAILY_JOB_LIMIT?: string };
 export const runtime = () => env as unknown as Runtime;
 export const db = () => runtime().DB;
 export class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
