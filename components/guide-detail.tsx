@@ -1,11 +1,6 @@
 'use client';
 
 import {
-  ArrowLeft,
-  ArrowUpRight,
-  BookOpen,
-  Check,
-  Download,
   ExternalLink,
   Headphones,
   LoaderCircle,
@@ -15,10 +10,9 @@ import {
   SkipBack,
   SkipForward,
   Square,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArtImage } from './art-image';
 import type { Guide } from '@/lib/types';
 import type { LocalGuide } from '@/lib/local';
@@ -26,241 +20,174 @@ import type { useSpeech } from '@/hooks/use-speech';
 
 export type Speech = ReturnType<typeof useSpeech>;
 
-function PreparationProgress({ speech }: { speech: Speech }) {
-  if (speech.engine !== 'edge' || speech.preparation.status === 'idle')
-    return null;
-  const { completed, total, status, error } = speech.preparation;
-  const percent = total ? Math.round((completed / total) * 100) : 0;
-  return (
-    <output className="audio-preparation" aria-live="polite">
-      <span className="audio-preparation-heading">
-        <strong>
-          {status === 'ready'
-            ? '讲解音频已准备完成'
-            : status === 'error'
-              ? '音频生成中断'
-              : '正在后台生成讲解音频'}
-        </strong>
-        <span>{percent}%</span>
-      </span>
-      <Progress value={percent} aria-label="讲解音频生成进度" />
-      <p>
-        {status === 'ready'
-          ? `共 ${total} 句，已保存到当前浏览器。`
-          : error || `已完成 ${completed} / ${total} 句`}
-      </p>
-    </output>
-  );
-}
-
-export function GuideDetail({
+/** Inline guide display — shown directly below the search panel */
+export function InlineGuide({
   guide,
   row,
   speech,
-  busy,
-  online,
-  onBack,
-  onDownload,
-  onRemove,
+  onClose,
   onSettings,
+  onRetryImage,
+  imageBusy,
 }: {
   guide: Guide;
   row?: LocalGuide;
   speech: Speech;
-  busy: boolean;
-  online: boolean;
-  onBack: () => void;
-  onDownload: () => void;
-  onRemove: () => void;
+  onClose: () => void;
   onSettings: () => void;
+  onRetryImage: () => void;
+  imageBusy: boolean;
 }) {
   const playbackPreparing = ['preparing', 'generating'].includes(
     speech.state.status,
   );
   const edgePreparation = speech.engine === 'edge' ? speech.preparation : null;
-  const description =
-    speech.engine === 'edge'
-      ? '讲解文出现后，自动用微软 Edge 在线自然声逐句生成，并保存到当前浏览器。'
-      : speech.engine === 'qwen'
-        ? '使用本地 Qwen3-TTS 高保真声音朗读。'
-        : speech.voice
-          ? '使用 Windows 中文系统声音即时朗读。'
-          : '尚未找到 Windows 中文系统声音。';
-  const action =
-    edgePreparation?.status === 'preparing'
-      ? `正在准备 ${edgePreparation.completed}/${edgePreparation.total}`
-      : edgePreparation?.status === 'error'
-        ? '重试生成音频'
-        : speech.state.status === 'speaking'
-          ? '暂停'
-          : speech.state.status === 'paused'
-            ? '继续讲解'
-            : '开始讲解';
+  const audioPreparing = edgePreparation?.status === 'preparing';
+  const audioError = edgePreparation?.status === 'error';
+  const action = audioError
+    ? '重试生成音频'
+    : speech.state.status === 'speaking'
+      ? '暂停'
+      : speech.state.status === 'paused'
+        ? '继续讲解'
+        : '开始讲解';
   const onPrimaryAction = () => {
-    if (edgePreparation?.status === 'error') speech.retryPreparation();
+    if (audioError) speech.retryPreparation();
     else if (speech.state.status === 'speaking') speech.pause();
+    else if (speech.state.status === 'idle' || speech.state.status === 'ended') speech.start();
     else speech.resume();
   };
 
   return (
-    <div className="detail">
-      <div className="detail-actions">
-        <Button variant="ghost" onClick={onBack}>
-          <ArrowLeft />
-          返回
-        </Button>
-        {row?.offline ? (
-          <Button variant="outline" onClick={onRemove}>
-            <Check />
-            已保存离线 · 移除
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            onClick={onDownload}
-            disabled={busy || !online}
-          >
-            {busy ? <LoaderCircle className="spin" /> : <Download />}保存离线
-          </Button>
-        )}
-      </div>
-      <div className="detail-heading">
+    <div className="inline-guide">
+      {/* ── Compact title bar ── */}
+      <div className="inline-guide-header">
         <div>
           <span className="eyebrow gold">
             {guide.type} · {guide.country} · {guide.year}
           </span>
-          <h1>{guide.title}</h1>
-          <p className="original">{guide.originalTitle}</p>
+          <h2 className="inline-guide-title">{guide.title}</h2>
+          {guide.originalTitle && (
+            <p className="original">{guide.originalTitle}</p>
+          )}
+          <div className="guide-meta-inline">
+            <span>{guide.creator}</span>
+            <span>
+              {{ zh: '中文', ja: '日本語', en: 'English' }[guide.language]} · 约{' '}
+              {guide.duration} 分钟
+            </span>
+            {guide.demo && <span>编辑示例</span>}
+          </div>
         </div>
-        <div className="guide-meta">
-          <span>{guide.creator}</span>
-          <span>
-            {{ zh: '中文', ja: '日本語', en: 'English' }[guide.language]} · 约{' '}
-            {guide.duration} 分钟
-          </span>
-          {guide.demo && <span>编辑示例 · 本机履历</span>}
+        <div className="inline-guide-actions">
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭作品">
+            <X size={18} />
+          </Button>
         </div>
       </div>
-      <ArtImage guide={guide} row={row} className="detail-image" />
-      <p className="image-credit">
-        {guide.imageCredit}
-        {guide.imageSource && (
-          <a href={guide.imageSource} target="_blank" rel="noreferrer">
-            {' '}
-            图片来源 <ExternalLink size={12} />
-          </a>
-        )}
-      </p>
-      <div className="reading-grid">
-        <Tabs defaultValue="reading" className="reading">
-          <TabsList variant="line">
-            <TabsTrigger value="reading">
-              <BookOpen />
-              作品介绍
-            </TabsTrigger>
-            {guide.language === 'zh' && (
-              <TabsTrigger value="speech">
-                <Headphones />
-                口播文本
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="sources">参考来源</TabsTrigger>
-          </TabsList>
-          <TabsContent value="reading">
-            <article lang={guide.language === 'zh' ? 'zh-CN' : guide.language}>
-              {guide.sections.map((section, index) => (
-                <section className="prose-section" key={index}>
-                  <h3>{section.title}</h3>
-                  <p>{section.text}</p>
-                </section>
-              ))}
-            </article>
-          </TabsContent>
-          {guide.language === 'zh' && (
-            <TabsContent value="speech">
-              <div className="transcript">
-                {speech.sentences.map((sentence, index) => (
-                  <p
-                    key={index}
-                    className={
-                      speech.state.index === index &&
-                      speech.state.status !== 'idle'
-                        ? 'current-sentence'
-                        : ''
-                    }
-                  >
-                    <span>{String(index + 1).padStart(2, '0')}</span>
-                    {sentence}
-                  </p>
-                ))}
+
+      {/* ── Image preview ── */}
+      <ArtImage guide={guide} row={row} className="inline-guide-image" />
+      <div className="image-credit" aria-live="polite">
+        <span>{imageBusy ? '正在获取并保存图片…' : row?.offline ? row.imageBlob ? '文字与图片已离线保存' : '文字已保存，图片待重试' : '图片可单独重新获取'}</span>
+        {row?.imageError && <p>{row.imageError}</p>}
+        <Button variant="ghost" disabled={imageBusy} onClick={onRetryImage}>
+          {imageBusy ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}
+          {row?.imageBlob ? '重新获取图片' : '重试图片'}
+        </Button>
+      </div>
+      {(guide.imageCredit || guide.imageSource) && (
+        <p className="image-credit">
+          {guide.imageCredit}
+          {guide.imageSource && (
+            <a href={guide.imageSource} target="_blank" rel="noreferrer">
+              {' '}
+              图片来源 <ExternalLink size={12} />
+            </a>
+          )}
+        </p>
+      )}
+
+      {/* ── Play controls ── */}
+      {guide.language === 'zh' && (
+        <div className="inline-play-card">
+          <div className="inline-play-controls">
+            <Button
+              onClick={onPrimaryAction}
+              disabled={
+                audioPreparing ||
+                playbackPreparing ||
+                (!speech.canPlay && !audioError)
+              }
+            >
+              {(audioPreparing || playbackPreparing) && (
+                <LoaderCircle className="spin" />
+              )}
+              {audioError && <RefreshCw />}
+              {audioPreparing
+                ? `生成音频 ${edgePreparation!.completed}/${edgePreparation!.total}`
+                : action}
+            </Button>
+          </div>
+          {edgePreparation?.status === 'ready' && (
+            <p className="play-ready-note">音频已就绪 · {edgePreparation.total} 句</p>
+          )}
+          {audioError && (
+            <p className="play-error-note">{edgePreparation?.error}</p>
+          )}
+        </div>
+      )}
+
+      {/* ── Reading content ── */}
+      <article
+        className="guide-reading"
+        lang={guide.language === 'zh' ? 'zh-CN' : guide.language}
+      >
+        {guide.sections.map((section, index) => (
+          <section className="prose-section" key={index}>
+            <h3>{section.title}</h3>
+            <p>{section.text}</p>
+          </section>
+        ))}
+      </article>
+
+      {/* ── Speech transcript (zh only) ── */}
+      {guide.language === 'zh' && speech.sentences.length > 0 && (
+        <div className="transcript">
+          <p className="transcript-label">口播文本</p>
+          {speech.sentences.map((sentence, index) => (
+            <p
+              key={index}
+              className={
+                speech.state.index === index && speech.state.status !== 'idle'
+                  ? 'current-sentence'
+                  : ''
+              }
+            >
+              <span>{String(index + 1).padStart(2, '0')}</span>
+              {sentence}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* ── Sources ── */}
+      {guide.sources.length > 0 && (
+        <div className="sources">
+          <p className="sources-label">参考来源</p>
+          {guide.sources.map((source, index) => (
+            <a key={index} href={source.url} target="_blank" rel="noreferrer">
+              <span>{String(index + 1).padStart(2, '0')}</span>
+              <div>
+                {source.title}
+                <small>{new URL(source.url).hostname}</small>
               </div>
-            </TabsContent>
-          )}
-          <TabsContent value="sources">
-            <div className="sources">
-              {guide.sources.map((source, index) => (
-                <a
-                  key={index}
-                  href={source.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <span>{String(index + 1).padStart(2, '0')}</span>
-                  <div>
-                    {source.title}
-                    <small>{new URL(source.url).hostname}</small>
-                  </div>
-                  <ExternalLink size={16} />
-                </a>
-              ))}
-              <p className="quiet">
-                史实与解读可能随研究更新。来源链接需要联网打开。
-              </p>
-            </div>
-          </TabsContent>
-        </Tabs>
-        <aside className="listen-card">
-          <Headphones className="gold" size={25} />
-          <h3>听一段作品的故事</h3>
-          {guide.language === 'zh' ? (
-            <>
-              <p>{description}</p>
-              <PreparationProgress speech={speech} />
-              <Button
-                onClick={onPrimaryAction}
-                disabled={
-                  playbackPreparing ||
-                  (!speech.canPlay && edgePreparation?.status !== 'error')
-                }
-              >
-                {edgePreparation?.status === 'preparing' ||
-                playbackPreparing ? (
-                  <LoaderCircle className="spin" />
-                ) : edgePreparation?.status === 'error' ? (
-                  <RefreshCw />
-                ) : speech.state.status === 'speaking' ? (
-                  <Pause />
-                ) : (
-                  <Play />
-                )}
-                {action}
-              </Button>
-              <button className="text-link" onClick={onSettings}>
-                选择朗读声音 <ArrowUpRight size={14} />
-              </button>
-              <p className="small-note">
-                {speech.engine === 'edge'
-                  ? '免费 · 在线生成 · 音频保存在当前浏览器'
-                  : speech.engine === 'qwen'
-                    ? '免费 · 本机生成 · 当前会话使用'
-                    : '免费 · Windows 系统声音'}
-              </p>
-            </>
-          ) : (
-            <p>本版只提供中文语音。你仍可阅读和离线保存这篇介绍。</p>
-          )}
-        </aside>
-      </div>
+              <ExternalLink size={16} />
+            </a>
+          ))}
+          <p className="quiet">史实与解读可能随研究更新。来源链接需要联网打开。</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -280,30 +207,26 @@ export function Player({ guide, speech }: { guide: Guide; speech: Speech }) {
       ? '音频生成中断'
       : speech.state.status === 'generating'
         ? '正在生成当前句'
-        : speech.state.status === 'paused'
-          ? '已暂停'
-          : speech.state.status === 'speaking'
-            ? '正在讲解'
-            : speech.state.status === 'ended'
-              ? '讲解结束'
-              : speech.engine === 'edge'
-                ? 'Edge 音频已准备'
-                : speech.engine === 'qwen'
-                  ? '本地 Qwen3-TTS'
-                  : 'Windows 系统声音';
+        : speech.state.status === 'ended'
+          ? '讲解结束'
+          : '';
+  const edgeIdle = speech.engine === 'edge' && speech.preparation.status === 'idle';
   const caption = edgePreparing
     ? `后台逐句生成并保存，已完成 ${speech.preparation.completed} / ${speech.preparation.total} 句`
     : edgeError
       ? speech.preparation.error
       : speech.state.error ||
         (!speech.canPlay
-          ? '当前浏览器无法使用所选声音'
+          ? edgeIdle
+            ? '正在准备音频…'
+            : '当前浏览器无法使用所选声音'
           : speech.state.status === 'idle'
-            ? '音频准备完成后即可播放'
+            ? (speech.sentences[0] ?? '')
             : speech.sentences[speech.state.index]);
   const onPlay = () => {
     if (edgeError) speech.retryPreparation();
     else if (speech.state.status === 'speaking') speech.pause();
+    else if (speech.state.status === 'idle' || speech.state.status === 'ended') speech.start();
     else speech.resume();
   };
   return (
@@ -313,7 +236,7 @@ export function Player({ guide, speech }: { guide: Guide; speech: Speech }) {
         <div>
           <strong>{guide.title}</strong>
           <span>
-            {label} · 第 {speech.state.index + 1} / {speech.sentences.length} 句
+            {label ? `${label} · ` : ''}第 {speech.state.index + 1} / {speech.sentences.length} 句
           </span>
         </div>
       </div>
